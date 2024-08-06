@@ -2,9 +2,9 @@ import time
 
 
 def DEBUG(*args, **kwargs):
-    t = time.strftime("%Y-%m-%d %X")
-    print(f"*** \033[34m[ {'DEBUG': <9}] {t} | ", *args, **kwargs, end="")
-    print("\033[0m")
+    # t = time.strftime("%Y-%m-%d %X")
+    # print(f"*** \033[34m[ {'DEBUG': <9}] {t} | ", *args, **kwargs, end="")
+    # print("\033[0m")
     pass
 
 

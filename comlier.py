@@ -26,6 +26,14 @@ def isWindows():
     return os.name == "nt"
 
 
+if isWindows():
+    sys_type = "windows"
+elif isLinux():
+    sys_type = "linux"
+else:
+    raise Exception("不支持的系统类型")
+
+
 def isheader(name: str):
     return (
         name.endswith(".h")
@@ -41,6 +49,8 @@ def issource(name: str):
         or name.endswith(".cpp")
         or name.endswith(".cxx")
         or name.endswith(".cc")
+        or name.endswith(".C")
+        or name.endswith(".c++")
     )
 
 
@@ -55,6 +65,8 @@ def set_options(option: list):
         /help               显示此帮助信息
         /run                在编译完成后运行编译结果(不建议使用)
         /rebuild            强制重新编译
+        /win                采用Windows命名风格编译
+        /unix               采用Linux命名风格编译
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
         /gun=               指定编译器，默认为g++
@@ -131,6 +143,11 @@ def set_options(option: list):
         elif item == "/run":
             global run
             run = True
+        elif item == "/win":
+            global sys_type
+            sys_type = "windows"
+        elif item == "/unix":
+            sys_type = "linux"
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -374,13 +391,19 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         )
         for file in complier_task
     ]
+    if sys_type == "windows":
+        object_exname = ".obj"
+    elif sys_type == "linux":
+        object_exname = ".o"
+    else:
+        raise Exception("不支持的系统类型！")
     output_list = [
         ".".join(
             os.path.normpath(os.path.join(os.path.abspath(build_path), file)).split(
                 "."
             )[:-1]
         )
-        + ".o"
+        + object_exname
         for file in complier_task
     ]
     log.DEBUG("源文件：", *source_list, sep="\n")
@@ -405,7 +428,7 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
                 os.path.abspath(
                     os.path.join(
                         build_path,
-                        ".".join(source_file.split(".")[:-1]) + ".o",
+                        ".".join(source_file.split(".")[:-1]) + object_exname,
                     )
                 )
             )
@@ -420,7 +443,7 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         elif isLinux():
             extention_name = ".out"
         else:
-            raise ValueError("不支持的系统类型！")
+            raise Exception("不支持的系统类型！")
 
         out_file = os.path.join(
             out_file_at,
@@ -444,7 +467,8 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
 
 def complier(options: list):
     if not options:
-        log.ERROR("未指定项目路径！")
+        log.INFO("cpm -c 命令文档:")
+        print(set_options.__doc__)
         return
     path = options[0]
     if path == "/help":
@@ -541,7 +565,7 @@ def complier(options: list):
                 f"{cmd} 1>>{os.path.join(build_path, '.complier.log')} 2>&1"
             )
             print(
-                f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*LEN):.<50}] {count/len(complier_cmd)*100:.2f}%",
+                f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*LEN):.<50}] {count}/{len(complier_cmd)}",
                 end="",
             )
             if res != 0:
@@ -582,7 +606,7 @@ def complier(options: list):
             count += 1
             res = os.system(f"{cmd} 1>>{os.path.join(build_path, '.link.log')} 2>&1")
             print(
-                f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*LEN):.<50}] {count/len(link_cmd)*100:.2f}%",
+                f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*LEN):.<50}] {count}/{len(link_cmd)}",
                 end="",
             )
             if res != 0:
