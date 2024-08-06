@@ -446,7 +446,7 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         if isWindows():
             extention_name = ".exe"
         elif isLinux():
-            extention_name = ".out"
+            extention_name = ""
         else:
             raise Exception("不支持的系统类型！")
 
