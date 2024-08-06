@@ -1,4 +1,5 @@
 import os, hashlib, pickle, copy, log
+import shutil
 
 has_build = False
 
@@ -13,6 +14,7 @@ lib_dirs = []
 link = []
 c_options = []
 defines = []
+rebuild = False
 
 
 def isLinux():
@@ -61,7 +63,7 @@ def set_options(option: list):
         /opt=               指定其它编译选项
         对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
     """
-    global gnu, std, include_dirs, lib_dirs, link, c_options, defines, ignore_floders
+    global gnu, std, include_dirs, lib_dirs, link, c_options, defines, ignore_floders, rebuild
     for item in option:
         if item.startswith("/gun="):
             gnu = item[5:]
@@ -98,20 +100,22 @@ def set_options(option: list):
             ignore_floders = item[5:].split(";")
             for item in ignore_floders:
                 for ch in item:
-                    if ch in "/\\<>*:?\"":
+                    if ch in '/\\<>*:?"':
                         log.ERROR(f"'{item}'不是文件夹名")
                         return False
         elif item.startswith("/ign+="):
             ignore_floders.extend(item[6:].split(";"))
             for item in ignore_floders:
                 for ch in item:
-                    if ch in "/\\<>*:?\"":
+                    if ch in '/\\<>*:?"':
                         log.ERROR(f"'{item}'不是文件夹名")
                         return False
         elif item == "/help":
             log.INFO("cpm -c 命令文档:")
             print(set_options.__doc__)
             return False
+        elif item == "/rebuild":
+            rebuild = True
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -432,12 +436,19 @@ def complier(options: list):
         log.INFO("cpm -c 命令文档:")
         print(set_options.__doc__)
         return
+    if not os.path.isdir(path):
+        log.ERROR(f"'{path}'不是文件夹！")
+        return
     if not os.path.exists(path):
-        log.ERROR("路径不存在：", path)
+        log.ERROR(f"路径'{path}'不存在")
         return
     if not set_options(options[1:]):
         return
     build_path = os.path.join(path, ".build")
+    # 清理构建目录
+    if rebuild and os.path.exists(build_path):
+        log.INFO("正在清理构建目录...")
+        shutil.rmtree(build_path)
     # 获取整个项目目录
     log.INFO("正在获取项目目录信息...")
     dict_files = get_floders_dict(path)
@@ -522,6 +533,7 @@ def complier(options: list):
                 print()
                 log.ERROR("编译失败！")
                 Faild = True
+                break
         with open(
             os.path.join(build_path, ".complier.log"), "r", encoding="utf-8"
         ) as f:
@@ -541,9 +553,14 @@ def complier(options: list):
     if Faild:
         return
 
+    # 保存哈希值
+    with open(os.path.join(build_path, ".hash.pkl"), "wb") as f:
+        pickle.dump(new_dict_files, f)
+
     if link_cmd:
         print("正在执行链接任务...")
         count = 0
+        f_count = 0
         with open(os.path.join(build_path, ".link.log"), "w", encoding="utf-8") as f:
             pass
         for cmd in link_cmd:
@@ -554,12 +571,25 @@ def complier(options: list):
                 end="",
             )
             if res != 0:
-                print()
-                log.ERROR("链接失败！")
+                f_count += 1
                 Faild = True
-        print("\n链接器输出：")
-        with open(os.path.join(build_path, ".link.log"), "r", encoding="utf-8") as f:
-            print(f.read())
+        print()
+        log.INFO(f"链接成功！{len(link_cmd)-f_count}/{len(link_cmd)}")
+        if f_count != 0:
+            log.ERROR(f"链接失败！{f_count}/{len(link_cmd)}")
+            print("链接器输出：")
+            with open(
+                os.path.join(build_path, ".link.log"), "r", encoding="utf-8"
+            ) as f:
+                for line in f:
+                    for item in line.split():
+                        if item in ["undefined", "reference"]:
+                            print("\033[31m" + item + "\033[0m", end=" ")
+                        elif item in ["multiple", "definition"]:
+                            print("\033[33m" + item + "\033[0m", end=" ")
+                        else:
+                            print(item, end=" ")
+                    print()
     else:
         log.INFO("没有需要链接的文件")
 
@@ -567,6 +597,3 @@ def complier(options: list):
         return
 
     log.INFO("编译完成！")
-    # 保存哈希值
-    with open(os.path.join(build_path, ".hash.pkl"), "wb") as f:
-        pickle.dump(new_dict_files, f)
