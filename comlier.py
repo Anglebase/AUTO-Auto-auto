@@ -1,5 +1,5 @@
 import os, hashlib, pickle, copy, log
-import shutil
+import shutil, sys
 
 has_build = False
 
@@ -15,6 +15,8 @@ link = []
 c_options = []
 defines = []
 rebuild = False
+res_path = "./res"
+run = False
 
 
 def isLinux():
@@ -52,6 +54,8 @@ def set_options(option: list):
     命令格式：-c {项目路径} [选项1 [选项2 [...]]]
     选项可以是以下之一：
         /help               显示此帮助信息
+        /run                在编译完成后运行编译结果(不建议使用)
+        /rebuild            强制重新编译
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
         /gun=               指定编译器，默认为g++
@@ -61,11 +65,12 @@ def set_options(option: list):
         /l=                 指定链接库链接参数
         /D=                 指定预定义宏
         /opt=               指定其它编译选项
+        /res=               指定资源文件路径
         对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
     """
-    global gnu, std, include_dirs, lib_dirs, link, c_options, defines, ignore_floders, rebuild
     for item in option:
         if item.startswith("/gun="):
+            global gnu
             gnu = item[5:]
             if not gnu:
                 gnu = "g++"
@@ -73,6 +78,7 @@ def set_options(option: list):
                 log.ERROR("未找到编译器：", gnu)
                 return False
         elif item.startswith("/std="):
+            global std
             std = item[5:]
             if not std:
                 std = "c++17"
@@ -87,24 +93,30 @@ def set_options(option: list):
                     log.WARNING("已使用默认语言标准：", "c11")
                     std = "c11"
         elif item.startswith("/I="):
-            include_dirs.extend(item[3:].split(";"))
+            global include_dirs
+            include_dirs.extend(item[3:].split(","))
         elif item.startswith("/L="):
-            lib_dirs.extend(item[3:].split(";"))
+            global lib_dirs
+            lib_dirs.extend(item[3:].split(","))
         elif item.startswith("/l="):
-            link.extend(item[3:].split(";"))
+            global link
+            link.extend(item[3:].split(","))
         elif item.startswith("/opt="):
-            c_options.extend(item[5:].split(";"))
+            global c_options
+            c_options.extend(item[5:].split(","))
         elif item.startswith("/D="):
-            defines.extend(item[3:].split(";"))
+            global defines
+            defines.extend(item[3:].split(","))
         elif item.startswith("/ign="):
-            ignore_floders = item[5:].split(";")
+            global ignore_floders
+            ignore_floders = item[5:].split(",")
             for item in ignore_floders:
                 for ch in item:
                     if ch in '/\\<>*:?"':
                         log.ERROR(f"'{item}'不是文件夹名")
                         return False
         elif item.startswith("/ign+="):
-            ignore_floders.extend(item[6:].split(";"))
+            ignore_floders.extend(item[6:].split(","))
             for item in ignore_floders:
                 for ch in item:
                     if ch in '/\\<>*:?"':
@@ -115,7 +127,14 @@ def set_options(option: list):
             print(set_options.__doc__)
             return False
         elif item == "/rebuild":
+            global rebuild
             rebuild = True
+        elif item.startswith("/res="):
+            global res_path
+            res_path = item[5:]
+        elif item == "/run":
+            global run
+            run = True
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -318,7 +337,7 @@ def generate_task(path: str, dict_files: dict, header_dict: dict, main_source: l
     complier_task = list(set(task_list))
 
     # 生成链接任务
-    link_task = {source: [] for source in main_source}
+    link_task = {source: [source] for source in main_source}
     for source in main_source:
         for header in header_dict:
             if source in header_dict[header]:
@@ -597,3 +616,13 @@ def complier(options: list):
         return
 
     log.INFO("编译完成！")
+
+    if run:
+        log.INFO("正在启用运行...")
+        for root, dirs, pragrams in os.walk(os.path.join(build_path, ".out")):
+            for pragram in pragrams:
+                if pragram.endswith(".exe" if isWindows() else ".out"):
+                    log.INFO(f"正在运行{pragram}...")
+                    log.DEBUG(os.path.join(os.path.abspath(root), pragram))
+                    ret = os.system(os.path.join(os.path.abspath(root), pragram))
+                    log.INFO(f"程序{pragram}运行结束，返回值：{ret}")
