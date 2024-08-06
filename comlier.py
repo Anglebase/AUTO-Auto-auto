@@ -15,7 +15,6 @@ link = []
 c_options = []
 defines = []
 rebuild = False
-res_path = "./res"
 run = False
 
 
@@ -129,9 +128,6 @@ def set_options(option: list):
         elif item == "/rebuild":
             global rebuild
             rebuild = True
-        elif item.startswith("/res="):
-            global res_path
-            res_path = item[5:]
         elif item == "/run":
             global run
             run = True
