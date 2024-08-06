@@ -6,28 +6,62 @@ has_build = False
 ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
 # 同时忽略所有以.或_开头的文件和文件夹
 
-"""
-参数选项             说明                          默认值
-/help           显示帮助信息                         /
-/gun=           指定编译器                          g++
-/std=           指定编译标准                        c++17
-/include_dirs=  指定额外的头文件搜索路径(不在项目内)      /
-/lib_dirs=      指定额外的库文件搜索路径(不在项目内)      /
-/link=          指定链接库链接参数                     /
-/options=       指定其它编译选项                       /
-"""
-
 gnu = "g++"
 std = "c++17"
 include_dirs = []
 lib_dirs = []
 link = []
-c_options = ""
+c_options = []
 defines = []
 
 
+def isLinux():
+    return os.name == "posix"
+
+
+def isWindows():
+    return os.name == "nt"
+
+
+def isheader(name: str):
+    return (
+        name.endswith(".h")
+        or name.endswith(".hpp")
+        or name.endswith(".hxx")
+        or name.endswith(".hh")
+    )
+
+
+def issource(name: str):
+    return (
+        name.endswith(".c")
+        or name.endswith(".cpp")
+        or name.endswith(".cxx")
+        or name.endswith(".cc")
+    )
+
+
+def islibirary(name: str):
+    return name.endswith(".lib") or name.endswith(".a") or name.endswith(".so")
+
+
 def set_options(option: list):
-    global gnu, std, include_dirs, lib_dirs, link, c_options, defines
+    """
+    命令格式：-c {项目路径} [选项1 [选项2 [...]]]
+    选项可以是以下之一：
+        /help               显示此帮助信息
+        /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
+        /ign+=              额外指定忽略的文件夹名
+        /gun=               指定编译器，默认为g++
+        /std=               指定编译标准，默认为c++17
+        /I=                 指定额外的头文件搜索路径(不在项目内)
+        /L=                 指定额外的库文件搜索路径(不在项目内)
+        /l=                 指定链接库链接参数
+        /D=                 指定预定义宏
+        /opt=               指定其它编译选项
+        对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
+    """
+    global gnu, std, include_dirs, lib_dirs, link, c_options, defines, ignore_floders
     for item in option:
         if item.startswith("/gun="):
             gnu = item[5:]
@@ -35,7 +69,7 @@ def set_options(option: list):
                 gnu = "g++"
             if not os.path.exists(gnu) and gnu not in ["g++", "gcc"]:
                 log.ERROR("未找到编译器：", gnu)
-                exit(1)
+                return False
         elif item.startswith("/std="):
             std = item[5:]
             if not std:
@@ -51,19 +85,38 @@ def set_options(option: list):
                     log.WARNING("已使用默认语言标准：", "c11")
                     std = "c11"
         elif item.startswith("/I="):
-            include_dirs = item[3:].split(";")
+            include_dirs.extend(item[3:].split(";"))
         elif item.startswith("/L="):
-            lib_dirs = item[3:].split(";")
+            lib_dirs.extend(item[3:].split(";"))
         elif item.startswith("/l="):
-            link = item[3:].split(";")
+            link.extend(item[3:].split(";"))
         elif item.startswith("/opt="):
-            c_options = item[5:].split(";")
+            c_options.extend(item[5:].split(";"))
         elif item.startswith("/D="):
-            defines = item[3:].split(";")
+            defines.extend(item[3:].split(";"))
+        elif item.startswith("/ign="):
+            ignore_floders = item[5:].split(";")
+            for item in ignore_floders:
+                for ch in item:
+                    if ch in "/\\<>*:?\"":
+                        log.ERROR(f"'{item}'不是文件夹名")
+                        return False
+        elif item.startswith("/ign+="):
+            ignore_floders.extend(item[6:].split(";"))
+            for item in ignore_floders:
+                for ch in item:
+                    if ch in "/\\<>*:?\"":
+                        log.ERROR(f"'{item}'不是文件夹名")
+                        return False
+        elif item == "/help":
+            log.INFO("cpm -c 命令文档:")
+            print(set_options.__doc__)
+            return False
         else:
             log.WARNING("被忽略的未知选项：", item)
 
     log.DEBUG("设置选项：", " ".join(option))
+    return True
 
 
 def del_ignore_files(file_dict: dict):
@@ -71,12 +124,12 @@ def del_ignore_files(file_dict: dict):
     for name in file_dict:
         if name.startswith(".") or name.startswith("_"):
             ls.append(name)
-            log.INFO("已忽略文件：", name)
+            log.INFO("已忽略文件:\t", name)
             continue
         if type(file_dict[name]) == dict:
             if name in ignore_floders or name.startswith(".") or name.startswith("_"):
                 ls.append(name)
-                log.INFO("已忽略文件夹：", name)
+                log.INFO("已忽略文件夹:\t", name)
                 continue
             else:
                 del_ignore_files(file_dict[name])
@@ -114,6 +167,16 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
             log.DEBUG("计算文件哈希值：", os.path.join(file_path, name))
             with open(os.path.join(file_path, name), "rb") as f:
                 project_dict[name] = hash_func(f.read()).hexdigest()
+            # 若是链接库自动追加搜索路径和链接参数
+            if islibirary(name):
+                global link
+                link.append(file_path)
+                if name.endswith(".a"):
+                    link.append(name[3:-2])
+                elif name.endswith(".so"):
+                    link.append(name[3:-3])
+                elif name.endswith(".lib"):
+                    link.append(name[:-4])
         else:
             hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
 
@@ -128,24 +191,6 @@ def diff_files(project_dict: dict, old_project_dict: dict):
                 project_dict[name] = "changed"
         else:
             diff_files(project_dict[name], old_project_dict.get(name, {}))
-
-
-def isheader(name: str):
-    return (
-        name.endswith(".h")
-        or name.endswith(".hpp")
-        or name.endswith(".hxx")
-        or name.endswith(".hh")
-    )
-
-
-def issource(name: str):
-    return (
-        name.endswith(".c")
-        or name.endswith(".cpp")
-        or name.endswith(".cxx")
-        or name.endswith(".cc")
-    )
 
 
 def tree_headers(relpath: str, project_dict: dict):
@@ -196,6 +241,7 @@ def tree_headers(relpath: str, project_dict: dict):
             for item in del_ele:
                 header_dict_ls[name].remove(item)
                 header_dict_ls[name].extend(header_dict[item])
+            header_dict_ls[name] = list(set(header_dict_ls[name]))  # 去重
         if state:
             expand_headers(header_dict_ls)
 
@@ -203,9 +249,9 @@ def tree_headers(relpath: str, project_dict: dict):
     log.DEBUG(*header_dict.items(), sep="\n")
 
     # 去重
-    log.DEBUG("正在去重...")
-    for name in header_dict:
-        header_dict[name] = list(set(header_dict[name]))
+    # log.DEBUG("正在去重...")
+    # for name in header_dict:
+    #     header_dict[name] = list(set(header_dict[name]))
 
     return header_dict
 
@@ -350,9 +396,16 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         out_file_at = os.path.abspath(
             os.path.join(output_path, os.path.dirname(output_file))
         )
+        if isWindows():
+            extention_name = ".exe"
+        elif isLinux():
+            extention_name = ".out"
+        else:
+            raise ValueError("不支持的系统类型！")
+
         out_file = os.path.join(
             out_file_at,
-            ".".join(os.path.basename(output_file).split(".")[:-1]) + ".exe",
+            ".".join(os.path.basename(output_file).split(".")[:-1]) + extention_name,
         )
         try:
             os.makedirs(out_file_at)
@@ -371,8 +424,19 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
 
 
 def complier(options: list):
+    if not options:
+        log.ERROR("未指定项目路径！")
+        return
     path = options[0]
-    set_options(options[1:])
+    if path == "/help":
+        log.INFO("cpm -c 命令文档:")
+        print(set_options.__doc__)
+        return
+    if not os.path.exists(path):
+        log.ERROR("路径不存在：", path)
+        return
+    if not set_options(options[1:]):
+        return
     build_path = os.path.join(path, ".build")
     # 获取整个项目目录
     log.INFO("正在获取项目目录信息...")
@@ -380,6 +444,7 @@ def complier(options: list):
     log.DEBUG(dict_files)
     old_dict_files = copy.deepcopy(dict_files)
     # 计算每个文件的哈希值
+    log.INFO("正在分析差异...")
     hash_file(hashlib.md5, dict_files, path)
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
@@ -397,7 +462,6 @@ def complier(options: list):
     except FileExistsError:
         pass
     # 比较哈希值
-    log.INFO("正在分析差异...")
     diff_files(dict_files, old_dict_files)
     log.DEBUG(dict_files)
     # 构造头文件依赖表
@@ -435,47 +499,70 @@ def complier(options: list):
     log.DEBUG("编译命令：", *complier_cmd, sep="\n")
     log.DEBUG("编译命令：", *link_cmd, sep="\n")
 
-    # 执行编译命令
-    log.INFO("正在执行编译任务...")
     Faild = False
-    count = 0
-    with open(os.path.join(build_path, ".complier.log"), "w") as f:
-        pass
-    for cmd in complier_cmd:
-        count += 1
-        res = os.system(f"{cmd} >>{os.path.join(build_path, '.complier.log')} 2>&1")
-        print(
-            f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*40):.<40}] {count/len(complier_cmd)*100:.2f}%",
-            end="",
-        )
-        if res != 0:
-            log.ERROR("\n编译失败！:", cmd)
-            Faild = True
+    LEN = 50
+    # 执行编译命令
     if complier_cmd:
-        with open(os.path.join(build_path, ".complier.log"), "r") as f:
+        log.INFO("正在执行编译任务...")
+        count = 0
+        with open(
+            os.path.join(build_path, ".complier.log"), "w", encoding="utf-8"
+        ) as f:
+            pass
+        for cmd in complier_cmd:
+            count += 1
+            res = os.system(
+                f"{cmd} 1>>{os.path.join(build_path, '.complier.log')} 2>&1"
+            )
+            print(
+                f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*LEN):.<50}] {count/len(complier_cmd)*100:.2f}%",
+                end="",
+            )
+            if res != 0:
+                print()
+                log.ERROR("编译失败！")
+                Faild = True
+        with open(
+            os.path.join(build_path, ".complier.log"), "r", encoding="utf-8"
+        ) as f:
             print("\n编译器输出：")
-            print(f.read())
+            for line in f:
+                if "note" in line:
+                    print("\033[36m" + line.strip() + "\033[0m")
+                elif "warning" in line:
+                    print("\033[33m" + line.strip() + "\033[0m")
+                elif "error" in line:
+                    print("\033[31m" + line.strip() + "\033[0m")
+                else:
+                    print(line, end="")
+    else:
+        log.INFO("没有需要编译的文件")
+
     if Faild:
         return
 
-    print("正在执行链接任务...")
-    count = 0
-    with open(os.path.join(build_path, ".link.log"), "w") as f:
-        pass
-    for cmd in link_cmd:
-        count += 1
-        res = os.system(f"{cmd} >>{os.path.join(build_path, '.link.log')} 2>&1")
-        print(
-            f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*40):.<40}] {count/len(link_cmd)*100:.2f}%",
-            end="",
-        )
-        if res != 0:
-            log.ERROR("\n链接失败！:", cmd)
-            Faild = True
     if link_cmd:
+        print("正在执行链接任务...")
+        count = 0
+        with open(os.path.join(build_path, ".link.log"), "w", encoding="utf-8") as f:
+            pass
+        for cmd in link_cmd:
+            count += 1
+            res = os.system(f"{cmd} 1>>{os.path.join(build_path, '.link.log')} 2>&1")
+            print(
+                f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*LEN):.<50}] {count/len(link_cmd)*100:.2f}%",
+                end="",
+            )
+            if res != 0:
+                print()
+                log.ERROR("链接失败！")
+                Faild = True
         print("\n链接器输出：")
-        with open(os.path.join(build_path, ".link.log"), "r") as f:
+        with open(os.path.join(build_path, ".link.log"), "r", encoding="utf-8") as f:
             print(f.read())
+    else:
+        log.INFO("没有需要链接的文件")
+
     if Faild:
         return
 

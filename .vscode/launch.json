@@ -15,7 +15,9 @@
                 ".\\ctest",
                 "/gun=C:\\GNU-GCC\\mingw64-v11\\bin\\g++.exe",
                 "/D=UNICODE;_UNICODE",
-                "/l=graphics;gdiplus;uuid;msimg32;gdi32;imm32;ole32;oleaut32;winmm;ws2_32"
+                "/l=graphics;gdiplus;uuid;msimg32;gdi32;imm32;ole32;oleaut32;winmm;ws2_32",
+                "/opt=-g;-Wall",
+                "/ign+=lib"
             ]
         }
     ]
