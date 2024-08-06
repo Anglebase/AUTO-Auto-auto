@@ -63,16 +63,16 @@ def set_options(option: list):
     命令格式：-c {项目路径} [选项1 [选项2 [...]]]
     选项可以是以下之一：
         /help               显示此帮助信息
-        /run                在编译完成后运行编译结果(不建议使用)
+        /run                在编译完成后运行编译结果
         /rebuild            强制重新编译
         /win                采用Windows命名风格编译
         /unix               采用Linux命名风格编译
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
-        /gun=               指定编译器，默认为g++
+        /cpr=               指定编译器，默认为g++
         /std=               指定编译标准，默认为c++17
-        /I=                 指定额外的头文件搜索路径(不在项目内)
-        /L=                 指定额外的库文件搜索路径(不在项目内)
+        /I=                 指定额外的头文件搜索路径(项目外)
+        /L=                 指定额外的库文件搜索路径(项目外)
         /l=                 指定链接库链接参数
         /D=                 指定预定义宏
         /opt=               指定其它编译选项
@@ -80,12 +80,17 @@ def set_options(option: list):
         对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
     """
     for item in option:
-        if item.startswith("/gun="):
+        if item.startswith("/cpr="):
             global gnu
             gnu = item[5:]
             if not gnu:
                 gnu = "g++"
-            if not os.path.exists(gnu) and gnu not in ["g++", "gcc"]:
+            if not os.path.exists(gnu) and gnu not in [
+                "g++",
+                "gcc",
+                "clang",
+                "clang++",
+            ]:
                 log.ERROR("未找到编译器：", gnu)
                 return False
         elif item.startswith("/std="):
