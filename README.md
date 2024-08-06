@@ -1,21 +1,59 @@
-# MinGW Compiler&Package Manager(cpm)
+# AUTO Auto auto
 
-cpm的设计目的是为了简化MinGW下C++项目的包管理和项目编译流程
+auto 是一个命令行工具，它可以帮助你在不写任何Makefile的情况下，自动编译 C/C++ 项目，编译时会自动分析项目依赖关系，生成编译链接命令，并自动调用编译器进行编译。
+
+## 安装
+auto 是一个单文件可执行程序，你可以直接下载并运行它，无需安装。
+
+## 依赖
+auto 依赖于 GCC/G++ 编译器，请确保你的系统中已经安装了 GCC/G++ 编译器。
 
 ## 功能
 
-### 项目自动编译
-```
-cpm -c {project_dir} [compiler_options]
-```
-project_dir: 项目目录
-compiler_options: 编译选项，可以是以下选项的组合：
-- `/gnu=[path]`                          : 指定MinGW安装目录
-- `/std=[c++11|c++14|c++17|c++20]`       : 指定编译的C++标准
-- `/I=[include_path];[include_path];...` : 指定头文件搜索路径(不在项目目录下)
-- `/D=[macro_name];[macro_name];...`     : 指定宏定义
-- `/L=[library_path];[library_path];...` : 指定链接库搜索路径(不在项目目录下)
-- `/l=[library_name];[library_name];...` : 指定链接库
-- `/opt=[optimization_level]`            : 指定其它编译选项，如-O2、-Wall等
+### C/C++项目自动编译  `auto -c [...]`
+    命令格式：-c {项目路径} [选项1 [选项2 [...]]]
+    选项可以是以下之一：
+        /help               显示此帮助信息
+        /run                在编译完成后运行编译结果(不建议使用)
+        /rebuild            强制重新编译
+        /win                采用Windows命名风格编译
+        /unix               采用Linux命名风格编译
+        /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
+        /ign+=              额外指定忽略的文件夹名
+        /gun=               指定编译器，默认为g++
+        /std=               指定编译标准，默认为c++17
+        /I=                 指定额外的头文件搜索路径(不在项目内)
+        /L=                 指定额外的库文件搜索路径(不在项目内)
+        /l=                 指定链接库链接参数
+        /D=                 指定预定义宏
+        /opt=               指定其它编译选项
+        /res=               指定资源文件路径
+        对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
 
-**注**：库搜索路径自动识别暂未实现
+### 导出静态/动态库  `auto -l [...]`
+    命令格式: -l [库类别] {库名} {链接源} [链接源 [...]] [选项 [...]]
+        库类别可以是以下值之一：
+            /help      显示此帮助信息
+            /dll       指定输出目标为 Windows 动态链接库(<库名>.dll)  [未完全支持]
+            /lib       指定输出目标为 Windows 静态链接库(<库名>.lib)  [未完全支持]
+            /a         指定输出目标为 Linux 静态链接库(lib<库名>.a)
+            /so        指定输出目标为 Linux 动态链接库(lib<库名>.so)
+        链接源可以是以下值之一：
+            /at=<项目路径>          指定链接文件的源项目路径(默认为当前执行目录)
+            /file+=<文件路径>       指定链接源为指定文件
+            /path+=<目录路径>       指定链接源为指定目录下的所有文件
+        选项可以是以下值之一：
+            若要为该选项指定多个值，请用逗号分隔，例如：-L=path1,path2,path3、-l=lib1,lib2
+            /L=         指定链接库搜索路径(仅当库类别为/dll或/so时有效)
+            /l=         指定链接库(仅当库类别为/dll或/so时有效)
+
+## 此项目构建
+
+运行以下命令，结果将生成在dist目录下：
+```
+pyinstaller --onefile --name=auto main.py
+```
+
+## 开发者
+
+- [Anglebase](https://github.com/Anglebase)
