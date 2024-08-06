@@ -210,8 +210,8 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
                 project_dict[name] = hash_func(f.read()).hexdigest()
             # 若是链接库自动追加搜索路径和链接参数
             if islibirary(name):
-                global link
-                link.append(file_path)
+                global link, lib_dirs
+                lib_dirs.append(file_path)
                 if name.endswith(".a"):
                     link.append(name[3:-2])
                 elif name.endswith(".so"):
