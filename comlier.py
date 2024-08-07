@@ -70,8 +70,8 @@ def set_options(option: list):
         /help               显示此帮助信息
         /run                在编译完成后运行编译结果
         /rebuild            强制重新编译
-        /win                采用Windows命名风格编译
-        /unix               采用Linux命名风格编译
+        /win                强制采用Windows命名风格编译(.obj)
+        /unix               强制采用Linux命名风格编译(.o)
         /all                显示更加详细的输出信息
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
@@ -360,14 +360,16 @@ def get_main_source_files(relpath: str, project_dict: dict):
     def append_main_source(path: str):
         trupath = os.path.normpath(os.path.join(relpath, path))
         with open(trupath, "r", encoding="utf-8") as f:
+            line_num = 0
             for line in f:
+                line_num += 1
                 if (
                     line.startswith("int main(")
                     or line.startswith("// main")
                     or line.startswith("void main(")
                 ):
                     res.append(path)
-                    log.INFO_MORE(f"检索到具有主函数文件: {trupath}")
+                    log.INFO_MORE(f"检索到具有主函数文件: {trupath}:{line_num}:0")
                     break
 
     def get_sources(path: str, project_dict: dict):
