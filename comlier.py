@@ -553,15 +553,6 @@ def complier(options: list):
         return
     global build_path
     build_path = os.path.join(path, ".build")
-    # 确认编译器
-    log.INFO("正在确认编译器...")
-    res1 = os.system(
-        f"{gnu} --version 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1"
-    )
-    res2 = os.system(f"{gnu} -v 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1")
-    if res1 != 0 and res2 != 0:
-        log.ERROR(f"找不到编译器: {gnu}")
-        return
     # 清理构建目录
     if rebuild and os.path.exists(build_path):
         log.INFO("正在清理构建目录...")
@@ -571,25 +562,30 @@ def complier(options: list):
     dict_files = get_floders_dict(path)
     log.DEBUG(dict_files)
     old_dict_files = copy.deepcopy(dict_files)
+    # 创建构建目录
+    if not os.path.exists(build_path):
+        os.mkdir(build_path)
+    create_build_dir(build_path, dict_files)
+    # 确认编译器
+    log.INFO("正在确认编译器...")
+    res1 = os.system(
+        f"{gnu} --version 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1"
+    )
+    res2 = os.system(f"{gnu} -v 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1")
+    if res1 != 0 and res2 != 0:
+        log.ERROR(f"找不到编译器: {gnu}")
+        return
     # 计算每个文件的哈希值
     log.INFO("正在计算差异...")
     hash_file(hashlib.md5, dict_files, path)
     print(f"\r正在计算哈希: [{'#'*50}] {file_count}/{file_count}")
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
-    try:
+    if os.path.exists(os.path.join(build_path, ".hash.pkl")):
         with open(os.path.join(build_path, ".hash.pkl"), "rb") as f:
             old_dict_files = pickle.load(f)
-    except FileNotFoundError:
-        try:
-            os.mkdir(build_path)
-        except FileExistsError:
-            pass
-    create_build_dir(build_path, dict_files)
-    try:
+    if not os.path.exists(os.path.join(build_path, ".out")):
         os.mkdir(os.path.join(build_path, ".out"))
-    except FileExistsError:
-        pass
     # 比较哈希值
     diff_files(dict_files, old_dict_files)
     if not rebuild:
