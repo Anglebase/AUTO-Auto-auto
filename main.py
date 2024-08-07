@@ -5,13 +5,13 @@ import log, traceback
 
 
 VERSION = "0.1"
-log.level = log.Debug
+log.level = log.Info
 
 def help():
     """
     命令选项：
-        -v 显示版本信息
-        -h 显示此帮助信息
+        -v                          显示版本信息
+        -h                          显示此帮助信息
         -c {ProjectPath} [...]      自动编译项目，运行 auto -c /help 查看更多内容
         -l {libName} [...]          链接库文件，运行 auto -l /help 查看更多内容
     """
