@@ -20,6 +20,8 @@ run = False
 file_count = 0
 source_file_count = 0
 
+build_path = ""
+
 
 def isLinux():
     return os.name == "posix"
@@ -75,13 +77,13 @@ def set_options(option: list):
         /ign+=              额外指定忽略的文件夹名
         /cpr=               指定编译器，默认为g++
         /std=               指定编译标准，默认为c++17
-        /I=                 指定额外的头文件搜索路径(项目外)
-        /L=                 指定额外的库文件搜索路径(项目外)
-        /l=                 指定链接库链接参数
+        /I=                 指定额外的头文件搜索路径(项目目录外)
+        /L=                 指定额外的库文件搜索路径(项目目录外)
+        /l=                 指定额外的链接库链接参数(项目目录外)
         /D=                 指定预定义宏
         /opt=               指定其它编译选项
         /res=               指定资源文件路径
-        对于可赋值的参数，多个值之间用分号分隔，如：/I=path1;path2;path3，/opt=-O2;-Wall
+        对于可赋值的参数，多个值之间用逗号分隔，如：/I=path1,path2,path3、/opt=-O2,-Wall
     """
     for item in option:
         if item.startswith("/cpr="):
@@ -220,7 +222,7 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
             scount = int(hased_file_count / file_count * 50)
             whitespaces = len(str(file_count)) - len(str(hased_file_count))
             print(
-                f"\r已计算文件：[{'#'*scount:.<50}] {whitespaces*' '}{hased_file_count}/{file_count}",
+                f"\r正在计算哈希: [{'#'*scount:.<50}] {whitespaces*' '}{hased_file_count}/{file_count}",
                 end="",
             )
             hased_file_count += 1
@@ -239,6 +241,7 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
 
 
 diff_file_count = 0
+hadcompare_file_count = 0
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
@@ -246,6 +249,13 @@ def diff_files(project_dict: dict, old_project_dict: dict):
     for name in project_dict:
         if type(project_dict[name]) == str:
             log.DEBUG("比较先后文件差异：", name)
+            global hadcompare_file_count
+            hadcompare_file_count += 1
+            if not rebuild and os.path.exists(build_path):
+                print(
+                    f"\r正在比较差异: [{'#'*int(diff_file_count/file_count*50):.<50}] {diff_file_count}/{file_count}",
+                    end="",
+                )
             if project_dict[name] == old_project_dict.get(name, ""):
                 project_dict[name] = ""
             else:
@@ -363,7 +373,7 @@ def get_main_source_files(relpath: str, project_dict: dict):
     def get_sources(path: str, project_dict: dict):
         for name in project_dict:
             if type(project_dict[name]) == str:
-                if issource(name):
+                if issource(name) and os.path.join(path, name) not in res:
                     append_main_source(os.path.join(path, name))
             else:
                 get_sources(os.path.join(path, name), project_dict[name])
@@ -539,7 +549,7 @@ def complier(options: list):
         return
     if not set_options(options[1:]):
         return
-
+    global build_path
     build_path = os.path.join(path, ".build")
     # 确认编译器
     log.INFO("正在确认编译器...")
@@ -560,9 +570,9 @@ def complier(options: list):
     log.DEBUG(dict_files)
     old_dict_files = copy.deepcopy(dict_files)
     # 计算每个文件的哈希值
-    log.INFO("正在分析差异...")
+    log.INFO("正在计算差异...")
     hash_file(hashlib.md5, dict_files, path)
-    print(f"\r已计算文件：[{'#'*50}] {file_count}/{file_count}")
+    print(f"\r正在计算哈希: [{'#'*50}] {file_count}/{file_count}")
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
     try:
@@ -580,6 +590,10 @@ def complier(options: list):
         pass
     # 比较哈希值
     diff_files(dict_files, old_dict_files)
+    if not rebuild:
+        print(
+            f"\r正在比较差异: [{'#'*50:.<50}] {file_count}/{file_count}",
+        )
     if not rebuild or not os.path.exists(build_path):
         global diff_file_count
         log.INFO(f"{diff_file_count} 个文件被更改")

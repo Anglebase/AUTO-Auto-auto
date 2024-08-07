@@ -7,14 +7,14 @@ def help():
     命令格式: -l [库类别] {库名} {链接源} [链接源 [...]] [选项 [...]]
         库类别可以是以下值之一：
             /help      显示此帮助信息
-            /dll       指定输出目标为 Windows 动态链接库(<库名>.dll)
-            /lib       指定输出目标为 Windows 静态链接库(<库名>.lib)
-            /a         指定输出目标为 Linux 静态链接库(lib<库名>.a)
-            /so        指定输出目标为 Linux 动态链接库(lib<库名>.so)
+            /dll       指定输出目标为 Windows 风格动态链接库(<库名>.dll)
+            /lib       指定输出目标为 Windows 风格静态链接库(<库名>.lib)
+            /so        指定输出目标为 Linux 风格动态链接库(lib<库名>.so)
+            /a         指定输出目标为 Linux 风格静态链接库(lib<库名>.a)
         链接源可以是以下值之一：
-            /at=<项目路径>          指定链接文件的源项目路径(默认为当前执行目录)
-            /file+=<文件路径>       指定链接源为指定文件
-            /path+=<目录路径>       指定链接源为指定目录下的所有文件
+            /at=<项目路径>          指定链接文件的源项目路径(默认为当前执行目录[.\])
+            /file+=<文件路径>       指定链接源为指定文件，若为相对路径，则相对于当前执行目录[.\]
+            /path+=<目录路径>       指定链接源为指定目录下的所有文件，若为相对路径，则相对于当前执行目录[.\]
         选项可以是以下值之一：
             若要为该选项指定多个值，请用逗号分隔，例如：-L=path1,path2,path3、-l=lib1,lib2
             /L=         指定链接库搜索路径(仅当库类别为/dll或/so时有效)
@@ -88,6 +88,11 @@ def linker(options: list):
         return
     set_optioins(options)
 
+    for i in range(len(link_path)):
+        link_path[i] = os.path.relpath(link_path[i], root_path)
+    for i in range(len(link_file)):
+        link_file[i] = os.path.relpath(link_file[i], root_path)
+
     log.DEBUG(f"输出目标: {output_type}")
     log.DEBUG(f"输出文件名: {output_name}")
     log.DEBUG(f"链接源文件: {link_file}")
@@ -97,7 +102,10 @@ def linker(options: list):
     build_dir = os.path.join(root_path, ".build")
     os.chdir(root_path)
     if not os.path.exists(build_dir):
-        log.ERROR("没有找到 '.build' 目录，请先运行 '-c' 命令编译项目")
+        log.ERROR(
+            "没有找到 '.build' 目录，请先运行 '-c' 命令编译项目或通过 '/at=' 指定源项目路径"
+        )
+        return
 
     files_list = []
     files_list.extend(link_file)
@@ -184,7 +192,7 @@ def linker(options: list):
                         print(word, end=" ")
                 print()
     else:
-        log.INFO(f"链接成功")
+        log.INFO(f"链接成功，输出文件位于: {os.path.dirname(output_path)}")
 
 
 if __name__ == "__main__":
