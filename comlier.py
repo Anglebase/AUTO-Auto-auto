@@ -329,11 +329,11 @@ def tree_headers(relpath: str, project_dict: dict):
 
     log.DEBUG(*header_dict.items(), sep="\n")
 
-    maxlen = max([len(str(len(header_dict[item]))) for item in header_dict])
     nouse_headers = []
     for item in header_dict:
         header_path = os.path.normpath(os.path.join(relpath, item))
         if len(header_dict[item]) >= 1:
+            maxlen = max([len(str(len(header_dict[item]))) for item in header_dict])
             lenth = len(header_dict[item])
             whitespaces = maxlen - len(str(lenth))
             log.INFO_MORE(
