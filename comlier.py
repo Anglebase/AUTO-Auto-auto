@@ -17,6 +17,9 @@ defines = []
 rebuild = False
 run = False
 
+file_count = 0
+source_file_count = 0
+
 
 def isLinux():
     return os.name == "posix"
@@ -67,6 +70,7 @@ def set_options(option: list):
         /rebuild            强制重新编译
         /win                采用Windows命名风格编译
         /unix               采用Linux命名风格编译
+        /all                显示更加详细的输出信息
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
         /cpr=               指定编译器，默认为g++
@@ -85,25 +89,27 @@ def set_options(option: list):
             gnu = item[5:]
             if not gnu:
                 gnu = "g++"
-            if not os.path.exists(gnu) and gnu not in [
-                "g++",
-                "gcc",
-                "clang",
-                "clang++",
-            ]:
-                log.ERROR("未找到编译器：", gnu)
-                return False
         elif item.startswith("/std="):
             global std
             std = item[5:]
             if not std:
                 std = "c++17"
-            if gnu == "g++" or os.path.basename(gnu).startswith("g++"):
+            if (
+                gnu == "g++"
+                or os.path.basename(gnu).startswith("g++")
+                or gnu == "clang++"
+                or os.path.basename(gnu).startswith("clang++")
+            ):
                 if std not in ["c++11", "c++14", "c++17", "c++20"]:
                     log.WARNING("无效的语言标准：", std)
                     log.WARNING("已使用默认语言标准：", "c++17")
                     std = "c++17"
-            elif gnu == "gcc" or os.path.basename(gnu).startswith("gcc"):
+            elif (
+                gnu == "gcc"
+                or os.path.basename(gnu).startswith("gcc")
+                or gnu == "clang"
+                or os.path.basename(gnu).startswith("clang")
+            ):
                 if std not in ["c99", "c11"]:
                     log.WARNING("无效的语言标准：", std)
                     log.WARNING("已使用默认语言标准：", "c11")
@@ -153,6 +159,8 @@ def set_options(option: list):
             sys_type = "windows"
         elif item == "/unix":
             sys_type = "linux"
+        elif item == "/all":
+            log.more = True
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -160,30 +168,12 @@ def set_options(option: list):
     return True
 
 
-def del_ignore_files(file_dict: dict):
-    ls = []
-    for name in file_dict:
-        if name.startswith(".") or name.startswith("_"):
-            ls.append(name)
-            log.INFO("已忽略文件:\t", name)
-            continue
-        if type(file_dict[name]) == dict:
-            if name in ignore_floders or name.startswith(".") or name.startswith("_"):
-                ls.append(name)
-                log.INFO("已忽略文件夹:\t", name)
-                continue
-            else:
-                del_ignore_files(file_dict[name])
-    for name in ls:
-        del file_dict[name]
-    return file_dict
-
-
 # 以递归的方式读取目录并存储为字典格式
 def get_floders_dict(path: str):
     files_dict = {}
 
     def get_files(path: str, files_dict: dict):
+        global file_count
         # print(path, files_dict)
         for root, dirs, files in os.walk(path):
             # print(root, dirs, files)
@@ -192,22 +182,48 @@ def get_floders_dict(path: str):
                     if dir not in files_dict:
                         files_dict[dir] = {}
                     log.DEBUG("读取到文件夹：", os.path.join(root, dir))
-                    get_files(os.path.join(root, dir), files_dict[dir])
+                    if (
+                        dir not in ignore_floders
+                        and not dir.startswith(".")
+                        and not dir.startswith("_")
+                    ):
+                        get_files(os.path.join(root, dir), files_dict[dir])
+                    else:
+                        log.INFO("已忽略文件夹:\t", os.path.join(root, dir))
             for file in files:
                 log.DEBUG("读取到文件：", os.path.join(root, file))
+                if file.startswith(".") or file.startswith("_"):
+                    log.INFO("已忽略文件:\t", os.path.join(root, file))
+                    continue
                 files_dict[file] = "new"
+                file_count += 1
+                global source_file_count
+                if issource(file) or isheader(file):
+                    source_file_count += 1
             break
 
     get_files(path, files_dict)
-    return del_ignore_files(files_dict)
+    log.INFO("搜索到文件数：", file_count)
+    log.DEBUG("检索到源/头文件数：", source_file_count)
+    return files_dict
+
+
+hased_file_count = 0
 
 
 def hash_file(hash_func: callable, project_dict: dict, file_path: str):
+    global hased_file_count
     for name in project_dict:
         if type(project_dict[name]) == str:
-            log.DEBUG("计算文件哈希值：", os.path.join(file_path, name))
             with open(os.path.join(file_path, name), "rb") as f:
                 project_dict[name] = hash_func(f.read()).hexdigest()
+            scount = int(hased_file_count / file_count * 50)
+            whitespaces = len(str(file_count)) - len(str(hased_file_count))
+            print(
+                f"\r已计算文件：[{'#'*scount:.<50}] {whitespaces*' '}{hased_file_count}/{file_count}",
+                end="",
+            )
+            hased_file_count += 1
             # 若是链接库自动追加搜索路径和链接参数
             if islibirary(name):
                 global link, lib_dirs
@@ -222,13 +238,18 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
             hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
 
 
+diff_file_count = 0
+
+
 def diff_files(project_dict: dict, old_project_dict: dict):
+    global diff_file_count
     for name in project_dict:
         if type(project_dict[name]) == str:
             log.DEBUG("比较先后文件差异：", name)
             if project_dict[name] == old_project_dict.get(name, ""):
                 project_dict[name] = ""
             else:
+                diff_file_count += 1
                 project_dict[name] = "changed"
         else:
             diff_files(project_dict[name], old_project_dict.get(name, {}))
@@ -248,6 +269,8 @@ def tree_headers(relpath: str, project_dict: dict):
     # 递归遍历目录，获取头文件
     get_headers(".", project_dict)
     log.DEBUG(*header_dict.items(), sep="\n")
+
+    log.INFO("检索到头文件数：", len(header_dict))
 
     def append_headers(path: str):
         with open(os.path.join(relpath, path), "r", encoding="utf-8") as f:
@@ -270,24 +293,47 @@ def tree_headers(relpath: str, project_dict: dict):
     get_sources(".", project_dict)
     log.DEBUG(*header_dict.items(), sep="\n")
 
-    # 展开头文件依赖
-    def expand_headers(header_dict_ls: dict):
-        state = False
-        for name in header_dict_ls:
-            del_ele = []
-            for item in header_dict_ls[name]:
-                if item in header_dict:
-                    del_ele.append(item)
-                    state = True
-            for item in del_ele:
-                header_dict_ls[name].remove(item)
-                header_dict_ls[name].extend(header_dict[item])
-            header_dict_ls[name] = list(set(header_dict_ls[name]))  # 去重
-        if state:
-            expand_headers(header_dict_ls)
+    for item in header_dict:
+        if len(header_dict[item]) >= 1:
+            log.DEBUG(f"头文件 {item} 包含 {len(header_dict[item])} 个直接引用")
+        else:
+            log.DEBUG(f"头文件 {item} 未被引用")
 
-    expand_headers(header_dict)
+    # 展开头文件依赖
+    state = True
+    while state:
+        state = False
+        for header in header_dict:
+            del_ls = []
+            for reffile in header_dict[header]:
+                if reffile == header:
+                    log.ERROR(f"头文件 {header} 包含自身引用！")
+                    return None
+                if reffile in header_dict:
+                    del_ls.append(reffile)
+                    state = True
+            for reffile in del_ls:
+                header_dict[header].remove(reffile)
+                header_dict[header].extend(header_dict[reffile])
+            header_dict[header] = list(set(header_dict[header]))
+
     log.DEBUG(*header_dict.items(), sep="\n")
+
+    maxlen = max([len(str(len(header_dict[item]))) for item in header_dict])
+    nouse_headers = []
+    for item in header_dict:
+        header_path = os.path.normpath(os.path.join(relpath, item))
+        if len(header_dict[item]) >= 1:
+            lenth = len(header_dict[item])
+            whitespaces = maxlen - len(str(lenth))
+            log.INFO_MORE(
+                f"具有 {whitespaces*' '}{lenth} 个有效引用的头文件： {header_path}"
+            )
+        else:
+            log.WARNING(f"未被引用的头文件 {header_path} 将被忽略")
+            nouse_headers.append(item)
+    for item in nouse_headers:
+        del header_dict[item]
 
     # 去重
     # log.DEBUG("正在去重...")
@@ -302,10 +348,16 @@ def get_main_source_files(relpath: str, project_dict: dict):
 
     # 检查是否存在main函数
     def append_main_source(path: str):
-        with open(os.path.join(relpath, path), "r", encoding="utf-8") as f:
+        trupath = os.path.normpath(os.path.join(relpath, path))
+        with open(trupath, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("int main(") or line.startswith("// main"):
+                if (
+                    line.startswith("int main(")
+                    or line.startswith("// main")
+                    or line.startswith("void main(")
+                ):
                     res.append(path)
+                    log.INFO_MORE(f"检索到具有主函数文件: {trupath}")
                     break
 
     def get_sources(path: str, project_dict: dict):
@@ -344,15 +396,14 @@ def generate_task(path: str, dict_files: dict, header_dict: dict, main_source: l
     for file in task_list:
         if isheader(os.path.basename(file)):
             header_list.append(file)
-    log.DEBUG("头文件列表：", header_list)
+    log.DEBUG("发生变化的头文件：", *header_list, sep="\n")
     for item in header_list:
+        task_list.remove(item)
         if item in header_dict:
-            task_list.remove(item)
             task_list.extend(header_dict[item])
-        else:
-            raise ValueError("头文件依赖错误：", item)
     # 编译任务
     complier_task = list(set(task_list))
+    log.DEBUG("编译任务：", *complier_task, sep="\n")
 
     # 生成链接任务
     link_task = {source: [source] for source in main_source}
@@ -488,7 +539,17 @@ def complier(options: list):
         return
     if not set_options(options[1:]):
         return
+
     build_path = os.path.join(path, ".build")
+    # 确认编译器
+    log.INFO("正在确认编译器...")
+    res1 = os.system(
+        f"{gnu} --version 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1"
+    )
+    res2 = os.system(f"{gnu} -v 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1")
+    if res1 != 0 and res2 != 0:
+        log.ERROR(f"找不到编译器: {gnu}")
+        return
     # 清理构建目录
     if rebuild and os.path.exists(build_path):
         log.INFO("正在清理构建目录...")
@@ -501,6 +562,7 @@ def complier(options: list):
     # 计算每个文件的哈希值
     log.INFO("正在分析差异...")
     hash_file(hashlib.md5, dict_files, path)
+    print(f"\r已计算文件：[{'#'*50}] {file_count}/{file_count}")
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
     try:
@@ -518,15 +580,22 @@ def complier(options: list):
         pass
     # 比较哈希值
     diff_files(dict_files, old_dict_files)
+    if not rebuild or not os.path.exists(build_path):
+        global diff_file_count
+        log.INFO(f"{diff_file_count} 个文件被更改")
     log.DEBUG(dict_files)
     # 构造头文件依赖表
     log.INFO("正在分析头文件依赖...")
     header_dict = tree_headers(relpath=path, project_dict=dict_files)
+    if header_dict is None:
+        return
     log.DEBUG(*header_dict.items(), sep="\n")
+    log.INFO(f"检索到 {len(header_dict)} 个具有有效引用的头文件")
     # 构造主函数文件表
     log.INFO("正在分析链接依赖...")
     main_source = get_main_source_files(relpath=path, project_dict=dict_files)
     log.DEBUG(main_source)
+    log.INFO(f"检索到 {len(main_source)} 个具有主函数的文件")
 
     # 添加头文件搜索路径
     global include_dirs
@@ -548,7 +617,7 @@ def complier(options: list):
     log.DEBUG("其它编译选项：", c_options)
 
     # 生成编译命令
-    log.INFO("正在生成编译命令...")
+    log.INFO("正在生成编译和链接命令...")
     complier_cmd, link_cmd = generate_build_cmd(build_path, complier_task, link_task)
 
     log.DEBUG("编译命令：", *complier_cmd, sep="\n")
@@ -578,19 +647,24 @@ def complier(options: list):
                 log.ERROR("编译失败！")
                 Faild = True
                 break
-        with open(
-            os.path.join(build_path, ".complier.log"), "r", encoding="utf-8"
-        ) as f:
-            print("\n编译器输出：")
-            for line in f:
-                if "note" in line:
-                    print("\033[36m" + line.strip() + "\033[0m")
-                elif "warning" in line:
-                    print("\033[33m" + line.strip() + "\033[0m")
-                elif "error" in line:
-                    print("\033[31m" + line.strip() + "\033[0m")
-                else:
-                    print(line, end="")
+        if not Faild:
+            print(
+                f"\r正在执行编译: [{'#'*50:.<50}] {len(complier_cmd)}/{len(complier_cmd)}"
+            )
+        if os.path.getsize(os.path.join(build_path, ".complier.log")):
+            with open(
+                os.path.join(build_path, ".complier.log"), "r", encoding="utf-8"
+            ) as f:
+                log.INFO("编译器输出：")
+                for line in f:
+                    if "note:" in line:
+                        print("\033[36m" + line.strip() + "\033[0m")
+                    elif "warning:" in line:
+                        print("\033[33m" + line.strip() + "\033[0m")
+                    elif "error:" in line:
+                        print("\033[31m" + line.strip() + "\033[0m")
+                    else:
+                        print(line, end="")
     else:
         log.INFO("没有需要编译的文件")
 
@@ -602,7 +676,7 @@ def complier(options: list):
         pickle.dump(new_dict_files, f)
 
     if link_cmd:
-        print("正在执行链接任务...")
+        log.INFO("正在执行链接任务...")
         count = 0
         f_count = 0
         with open(os.path.join(build_path, ".link.log"), "w", encoding="utf-8") as f:
