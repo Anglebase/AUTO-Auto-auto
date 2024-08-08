@@ -27,6 +27,7 @@ include_parent_depth = 2
 diff_file_count = 0
 hadcompare_file_count = 0
 hased_file_count = 0
+output_path = "out"
 
 
 def init():
@@ -69,6 +70,8 @@ def init():
 
     global hased_file_count
     hased_file_count = 0
+    global output_path
+    output_path = "out"
 
 
 def isLinux():
@@ -121,6 +124,7 @@ def set_options(option: list):
         /win                强制采用Windows命名风格编译(.obj)
         /unix               强制采用Linux命名风格编译(.o)
         /all                显示更加详细的输出信息
+        /out=               指定结果输出目录，默认为out
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
         /cpr=               指定编译器，默认为g++
@@ -219,6 +223,9 @@ def set_options(option: list):
             else:
                 log.ERROR("选项参数必须为数字：", item)
                 return False
+        elif item.startswith("/out="):
+            global output_path
+            output_path = item[5:]
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -581,7 +588,11 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
             )
             for source_file in source_files
         ]
-        out_file_at = os.path.normpath(os.path.join(os.path.dirname(build_path), "out"))
+        global output_path
+        if os.path.isabs(output_path):
+            out_file_at = os.path.normpath(output_path)
+        else:
+            out_file_at = os.path.normpath(os.path.join(os.path.dirname(build_path), output_path))
 
         if isWindows():
             extention_name = ".exe"
