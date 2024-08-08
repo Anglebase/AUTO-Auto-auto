@@ -54,6 +54,7 @@ auto -l /static jsoncpp /path+=.\jsoncpp\src\lib_json\ /at=.\jsoncpp\
 输出如下：
 ![image](./autolib.png)
 通过输出，可以看到 auto 成功生成了静态链接库 `jsoncpp.lib`，它位于 `jsoncpp\.build\.out` 目录下。
+> 自 v0.2 起，默认输出目录变为 `jsoncpp\lib`
 
 **到此为止，已经成功地创建了静态链接库jsoncpp.lib，现在通过它来应用到自己的程序中**
 
