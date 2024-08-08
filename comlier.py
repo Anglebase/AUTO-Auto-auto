@@ -436,9 +436,7 @@ def get_main_source_files(relpath: str, project_dict: dict):
                     its_name = ".".join(os.path.basename(path).split(".")[:-1])
                     if its_name in name_list:
                         nonlocal count_id
-                        log.WARNING(
-                            f"文件 {trupath} 与 {name_list[its_name]} 重名"
-                        )
+                        log.WARNING(f"文件 {trupath} 与 {name_list[its_name]} 重名")
                         rename = (
                             ".".join(path.split(".")[:-1])
                             + f"_{count_id}.{path.split('.')[-1]}"
@@ -688,7 +686,8 @@ def complier(options: list):
         log.ERROR(f"找不到编译器: {gnu}")
         return
     # 计算每个文件的哈希值
-    log.INFO("正在计算差异...")
+    type_name_str = "哈希值" if rebuild or not os.path.exists(build_path) else "差异"
+    log.INFO(f"正在计算{type_name_str}...")
     hash_file(hashlib.md5, dict_files, path)
     print(f"\r正在计算哈希: [{'#'*50}] {file_count}/{file_count}")
     new_dict_files = copy.deepcopy(dict_files)
@@ -848,10 +847,13 @@ def complier(options: list):
 
     if run:
         log.INFO("正在启用运行...")
-        for root, dirs, pragrams in os.walk(os.path.join(build_path, ".out")):
+        for root, dirs, pragrams in os.walk(os.path.join(path, output_path)):
             for pragram in pragrams:
-                if pragram.endswith(".exe" if isWindows() else ".out"):
+                if pragram.endswith(".exe" if isWindows() else ""):
                     log.INFO(f"正在运行{pragram}...")
                     log.DEBUG(os.path.join(os.path.abspath(root), pragram))
                     ret = os.system(os.path.join(os.path.abspath(root), pragram))
-                    log.INFO(f"程序{pragram}运行结束，返回值：{ret}")
+                    if ret != 0:
+                        log.WARNING(f"程序{pragram}运行结束，返回值：{ret}")
+                    else:
+                        log.INFO(f"程序{pragram}运行结束，返回值：{ret}")

@@ -33,7 +33,7 @@ root_path = os.getcwd()
 
 L_dirs = []
 l_libs = []
-
+output_path = "lib"
 
 def init():
     global linker_dir
@@ -52,6 +52,8 @@ def init():
     L_dirs = []
     global l_libs
     l_libs = []
+    global output_path
+    output_path = "lib"
 
 
 def set_optioins(options: list):
@@ -200,7 +202,7 @@ def linker(options: list):
 
     log.DEBUG(f"链接源文件: {files_list}")
     if not files_list:
-        log.ERROR("没有找到用于链接的目标文件")
+        log.ERROR("没有找到用于链接的目标文件(.obj/.o)")
         return
 
     # 转换为绝对路径
@@ -214,11 +216,17 @@ def linker(options: list):
             files_list[i] = os.path.abspath(files_list[i])
         files_list[i] = os.path.normpath(files_list[i])
 
+    global output_path
     log.DEBUG(f"链接源文件: {files_list}")
-    output_path = os.path.join(build_dir, os.path.join(".out", output_name))
-    output_path_unix = os.path.join(
-        build_dir, os.path.join(".out", "lib" + output_name)
-    )
+    if os.path.isabs(output_path):
+        output_path = os.path.join(output_path, output_name)
+        output_path_unix = os.path.join(output_path, "lib" + output_name)
+    else:
+        output_path = os.path.join(root_path, os.path.join(output_path, output_name))
+        output_path_unix = os.path.join(root_path, os.path.join(output_path, "lib" + output_name))
+    
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
 
     L_args = " ".join(["-L" + d for d in L_dirs]) if L_dirs else ""
     l_args = " ".join(["-l" + l for l in l_libs]) if l_libs else ""
