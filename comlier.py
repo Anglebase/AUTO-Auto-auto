@@ -22,6 +22,43 @@ source_file_count = 0
 
 build_path = ""
 
+include_parent_depth = 2
+
+
+def init():
+    global has_build
+    has_build = False
+    # 忽略的文件夹
+    global ignore_floders
+    ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
+    # 同时忽略所有以.或_开头的文件和文件夹
+    global gnu
+    gnu = "g++"
+    global std
+    std = "c++17"
+    global include_dirs
+    include_dirs = []
+    global lib_dirs
+    lib_dirs = []
+    global link
+    link = []
+    global c_options
+    c_options = []
+    global defines
+    defines = []
+    global rebuild
+    rebuild = False
+    global run
+    run = False
+    global file_count
+    file_count = 0
+    global source_file_count
+    source_file_count = 0
+    global build_path
+    build_path = ""
+    global include_parent_depth
+    include_parent_depth = 2
+
 
 def isLinux():
     return os.name == "posix"
@@ -77,6 +114,7 @@ def set_options(option: list):
         /ign+=              额外指定忽略的文件夹名
         /cpr=               指定编译器，默认为g++
         /std=               指定编译标准，默认为c++17
+        /I:                 指定头文件父目录深度，默认为2，即头文件所在目录和该目录的父目录
         /I=                 指定额外的头文件搜索路径(项目目录外)
         /L=                 指定额外的库文件搜索路径(项目目录外)
         /l=                 指定额外的链接库链接参数(项目目录外)
@@ -163,6 +201,13 @@ def set_options(option: list):
             sys_type = "linux"
         elif item == "/all":
             log.more = True
+        elif item.startswith("/I:"):
+            global include_parent_depth
+            if item[3:].isdigit():
+                include_parent_depth = int(item[3:])
+            else:
+                log.ERROR("选项参数必须为数字：", item)
+                return False
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -533,6 +578,19 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
     return complier_list, link_list
 
 
+def include_extend(include_dirs: list) -> list:
+    res = []
+    for item in include_dirs:
+        dir = item
+        if dir not in res:
+            res.append(dir)
+        for _ in range(include_parent_depth - 1):
+            dir = os.path.dirname(dir)
+            if dir not in res:
+                res.append(dir)
+    return res
+
+
 def complier(options: list):
     if not options:
         log.INFO("cpm -c 命令文档:")
@@ -621,6 +679,8 @@ def complier(options: list):
     log.DEBUG("编译任务：", complier_task)
     log.DEBUG("链接任务：", link_task)
 
+    include_dirs = include_extend(include_dirs)
+    
     log.DEBUG("GNU：", gnu)
     log.DEBUG("标准：", std)
     log.DEBUG("头文件搜索路径：", include_dirs)
