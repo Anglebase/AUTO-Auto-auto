@@ -662,6 +662,7 @@ def exeute_complier_task(complier_cmd: list):
     count = 0
     pid = 0
     mutex = Lock()
+    log.INFO("正在执行编译...")
     pool = ThreadPoolExecutor(max_workers=os.cpu_count() * max_thread_every_cpu)
 
     def complier_progress(cmd: str, pid: int):
@@ -681,6 +682,7 @@ def exeute_complier_task(complier_cmd: list):
 
     res_ls: list[Future] = []
 
+    log.INFO("正在提交编译任务...")
     for cmd in complier_cmd:
         res_ls.append(pool.submit(complier_progress, cmd, pid))
         pid += 1
@@ -690,29 +692,35 @@ def exeute_complier_task(complier_cmd: list):
             f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*50):.<50}] {count}/{len(complier_cmd)}",
             end="",
         )
+
+        for i in range(len(res_ls)):
+            if not res_ls[i].done():
+                continue
+            res = res_ls[i].result()
+            if res != 0:
+                print()
+                log.ERROR(f"任务 {i} 编译失败！")
+                with open(
+                    os.path.join(build_path, f".complier_{i}.log"),
+                    "r",
+                    encoding="utf-8",
+                ) as f:
+                    log.INFO("编译器输出：")
+                    for line in f:
+                        if "note:" in line:
+                            print("\033[36m" + line.strip() + "\033[0m")
+                        elif "warning:" in line:
+                            print("\033[33m" + line.strip() + "\033[0m")
+                        elif "error:" in line:
+                            print("\033[31m" + line.strip() + "\033[0m")
+                        else:
+                            print(line, end="")
+                return False
+
         time.sleep(0.1)
         if count == len(complier_cmd):
             print(f"\r正在执行编译: [{'#'*50:.<50}] {count}/{len(complier_cmd)}")
             break
-
-    for i in range(len(res_ls)):
-        res = res_ls[i].result()
-        if res != 0:
-            log.ERROR(f"编译失败！")
-            with open(
-                os.path.join(build_path, f".complier_{i}.log"), "r", encoding="utf-8"
-            ) as f:
-                log.INFO("编译器输出：")
-                for line in f:
-                    if "note:" in line:
-                        print("\033[36m" + line.strip() + "\033[0m")
-                    elif "warning:" in line:
-                        print("\033[33m" + line.strip() + "\033[0m")
-                    elif "error:" in line:
-                        print("\033[31m" + line.strip() + "\033[0m")
-                    else:
-                        print(line, end="")
-            return False
 
     return True
 
