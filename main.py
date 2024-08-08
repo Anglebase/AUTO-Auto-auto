@@ -5,7 +5,7 @@ import log, traceback
 
 
 VERSION = "0.1"
-log.level = log.Info
+log.level = log.Debug
 
 
 def help():

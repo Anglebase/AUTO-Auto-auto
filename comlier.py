@@ -28,6 +28,7 @@ diff_file_count = 0
 hadcompare_file_count = 0
 hased_file_count = 0
 
+
 def init():
     global has_build
     has_build = False
@@ -65,7 +66,7 @@ def init():
     diff_file_count = 0
     global hadcompare_file_count
     hadcompare_file_count = 0
-    
+
     global hased_file_count
     hased_file_count = 0
 
@@ -265,7 +266,6 @@ def get_floders_dict(path: str):
     return files_dict
 
 
-
 def hash_file(hash_func: callable, project_dict: dict, file_path: str):
     global hased_file_count
     for name in project_dict:
@@ -291,8 +291,6 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
                     link.append(name[:-4])
         else:
             hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
-
-
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
@@ -406,6 +404,9 @@ def tree_headers(relpath: str, project_dict: dict):
 
 def get_main_source_files(relpath: str, project_dict: dict):
     res = []
+    name_list = {}
+    rename_list = {}
+    count_id = 0
 
     # 检查是否存在main函数
     def append_main_source(path: str):
@@ -419,7 +420,22 @@ def get_main_source_files(relpath: str, project_dict: dict):
                     or line.startswith("// main")
                     or line.startswith("void main(")
                 ):
-                    res.append(path)
+                    if os.path.basename(path) in name_list:
+                        nonlocal count_id
+                        log.WARNING(
+                            f"文件 {path} 与 {name_list[os.path.basename(path)]} 重名"
+                        )
+                        rename = (
+                            ".".join(path.split(".")[:-1])
+                            + f"_{count_id}.{path.split('.')[-1]}"
+                        )
+                        log.WARNING(f"文件 {path} 已自动重命名为 {rename}")
+                        res.append(rename)
+                        rename_list[rename] = path
+                        count_id += 1
+                    else:
+                        res.append(path)
+                    name_list[os.path.basename(path)] = trupath
                     log.INFO_MORE(f"检索到具有主函数文件: {trupath}:{line_num}:0")
                     break
 
@@ -432,10 +448,12 @@ def get_main_source_files(relpath: str, project_dict: dict):
                 get_sources(os.path.join(path, name), project_dict[name])
 
     get_sources(".", project_dict)
-    return res
+    return res, rename_list
 
 
-def generate_task(path: str, dict_files: dict, header_dict: dict, main_source: list):
+def generate_task(
+    path: str, dict_files: dict, header_dict: dict, main_source: list, rename_list: dict
+):
     # 生成编译任务
     changed_list = []
 
@@ -469,10 +487,17 @@ def generate_task(path: str, dict_files: dict, header_dict: dict, main_source: l
     log.DEBUG("编译任务：", *complier_task, sep="\n")
 
     # 生成链接任务
-    link_task = {source: [source] for source in main_source}
+    link_task = {
+        source: [source if source not in rename_list else rename_list[source]]
+        for source in main_source
+    }
     for source in main_source:
         for header in header_dict:
-            if source in header_dict[header]:
+            if (
+                source
+                if source not in rename_list
+                else rename_list[source] in header_dict[header]
+            ):
                 link_task[source].extend(header_dict[header])
         link_task[source] = list(set(link_task[source]))  # 去重
 
@@ -482,7 +507,9 @@ def generate_task(path: str, dict_files: dict, header_dict: dict, main_source: l
     for source in link_task:
         del_ls = []
         for item in link_task[source]:
-            if item in main_source and item != source:
+            if (item in main_source or item in rename_list.values()) and item != (
+                source if source not in rename_list else rename_list[source]
+            ):
                 del_ls.append(item)
         for item in del_ls:
             link_task[source].remove(item)
@@ -555,7 +582,7 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
             for source_file in source_files
         ]
         out_file_at = os.path.normpath(os.path.join(os.path.dirname(build_path), "out"))
-        
+
         if isWindows():
             extention_name = ".exe"
         elif isLinux():
@@ -666,7 +693,9 @@ def complier(options: list):
     log.INFO(f"检索到 {len(header_dict)} 个具有有效引用的头文件")
     # 构造主函数文件表
     log.INFO("正在分析链接依赖...")
-    main_source = get_main_source_files(relpath=path, project_dict=dict_files)
+    main_source, rename_list = get_main_source_files(
+        relpath=path, project_dict=dict_files
+    )
     log.DEBUG(main_source)
     log.INFO(f"检索到 {len(main_source)} 个具有主函数的文件")
 
@@ -677,13 +706,15 @@ def complier(options: list):
     include_dirs = list(set(include_dirs))
 
     log.INFO("正在生成任务...")
-    complier_task, link_task = generate_task(path, dict_files, header_dict, main_source)
+    complier_task, link_task = generate_task(
+        path, dict_files, header_dict, main_source, rename_list
+    )
 
     log.DEBUG("编译任务：", complier_task)
     log.DEBUG("链接任务：", link_task)
 
     include_dirs = include_extend(include_dirs)
-    
+
     log.DEBUG("GNU：", gnu)
     log.DEBUG("标准：", std)
     log.DEBUG("头文件搜索路径：", include_dirs)
