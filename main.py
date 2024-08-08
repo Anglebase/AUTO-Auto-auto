@@ -4,7 +4,7 @@ import linker
 import log, traceback
 
 
-VERSION = "0.1"
+VERSION = "0.2"
 log.level = log.Info
 
 
