@@ -142,7 +142,6 @@ def set_options(option: list):
         /l=                 指定额外的链接库链接参数(项目目录外)
         /D=                 指定预定义宏
         /opt=               指定其它编译选项
-        /res=               指定资源文件路径
         对于可赋值的参数，多个值之间用逗号分隔，如：/I=path1,path2,path3、/opt=-O2,-Wall
     """
     for item in option:

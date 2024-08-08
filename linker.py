@@ -16,9 +16,9 @@ def help():
         选项可以是以下值之一：
             /unix           强制使用Linux命名风格(libxxx.a, libxxx.so)
             /win            强制使用Windows命名风格(xxx.lib, xxx.dll)
-            /lnkr=          指定静态链接器路径(仅当库类别为/lib或/a时有效)，默认为'ar'
-            /L=             指定链接库搜索路径(仅当库类别为/dll或/so时有效)
-            /l=             指定链接库(仅当库类别为/dll或/so时有效)
+            /lnkr=          指定静态链接器路径(仅当库类别为/static时有效)，默认为'ar'
+            /L=             指定链接库搜索路径(仅当库类别为/shared时有效)
+            /l=             指定链接库(仅当库类别为/shared时有效)
             若要为该选项指定多个值，请用逗号分隔，例如：-L=path1,path2,path3、-l=lib1,lib2
     """
     print(help.__doc__)
