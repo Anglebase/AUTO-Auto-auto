@@ -5,7 +5,7 @@ import log, traceback
 
 
 VERSION = "0.1"
-log.level = log.Debug
+log.level = log.Info
 
 
 def help():
@@ -68,6 +68,7 @@ def main():
     for option in commends:
         comlier.init()
         linker.init()
+        log.INFO(f"执行命令: {' '.join(option)}")
         if option[0] == "-c":
             comlier.complier(option[1:])
         elif option[0] == "-v":

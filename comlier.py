@@ -420,6 +420,12 @@ def get_main_source_files(relpath: str, project_dict: dict):
         trupath = os.path.normpath(os.path.join(relpath, path))
         with open(trupath, "r", encoding="utf-8") as f:
             line_num = 0
+            if isWindows():
+                ext_name = ".exe"
+            elif isLinux():
+                ext_name = ""
+            else:
+                raise Exception("不支持的系统类型")
             for line in f:
                 line_num += 1
                 if (
@@ -427,22 +433,27 @@ def get_main_source_files(relpath: str, project_dict: dict):
                     or line.startswith("// main")
                     or line.startswith("void main(")
                 ):
-                    if os.path.basename(path) in name_list:
+                    its_name = ".".join(os.path.basename(path).split(".")[:-1])
+                    if its_name in name_list:
                         nonlocal count_id
                         log.WARNING(
-                            f"文件 {path} 与 {name_list[os.path.basename(path)]} 重名"
+                            f"文件 {trupath} 与 {name_list[its_name]} 重名"
                         )
                         rename = (
                             ".".join(path.split(".")[:-1])
                             + f"_{count_id}.{path.split('.')[-1]}"
                         )
-                        log.WARNING(f"文件 {path} 已自动重命名为 {rename}")
+                        out_name = (
+                            ".".join(os.path.basename(rename).split(".")[:-1])
+                            + ext_name
+                        )
+                        log.WARNING(f"文件 {trupath} 将生成为 {out_name}")
                         res.append(rename)
                         rename_list[rename] = path
                         count_id += 1
                     else:
                         res.append(path)
-                    name_list[os.path.basename(path)] = trupath
+                    name_list[its_name] = trupath
                     log.INFO_MORE(f"检索到具有主函数文件: {trupath}:{line_num}:0")
                     break
 
@@ -592,7 +603,9 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         if os.path.isabs(output_path):
             out_file_at = os.path.normpath(output_path)
         else:
-            out_file_at = os.path.normpath(os.path.join(os.path.dirname(build_path), output_path))
+            out_file_at = os.path.normpath(
+                os.path.join(os.path.dirname(build_path), output_path)
+            )
 
         if isWindows():
             extention_name = ".exe"
