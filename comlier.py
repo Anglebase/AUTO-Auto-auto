@@ -6,18 +6,18 @@ from threading import Lock
 
 
 def show_progress(current, total, msg):
+    time.sleep(0.1)
     scount = int(current / total * 50)
     whitespaces = len(str(total)) - len(str(current))
     print(
-        f"\r{msg}: [{'#'*scount:.<50}] {whitespaces*' '}{current}/{total}",
+        f"\r{msg}: [{'#'*scount:.<50}] {whitespaces*' '}({current}/{total})",
         end="",
     )
-    sys.stdout.flush()
     if current == total:
         print()
-        return True
-    else:
         return False
+
+    return True
 
 
 g_has_build = False
@@ -315,9 +315,6 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
             if type(project_dict[name]) == str:
                 with open(os.path.join(file_path, name), "rb") as f:
                     project_dict[name] = hash_func(f.read()).hexdigest()
-                mutex_g_hased_file_count.acquire()
-                g_hased_file_count += 1
-                mutex_g_hased_file_count.release()
                 # 若是链接库自动追加搜索路径和链接参数
                 mutex_g_link_g_lib_dirs.acquire()
                 if islibirary(name):
@@ -330,6 +327,9 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
                     elif name.endswith(".lib"):
                         g_link.append(name[:-4])
                 mutex_g_link_g_lib_dirs.release()
+                mutex_g_hased_file_count.acquire()
+                g_hased_file_count += 1
+                mutex_g_hased_file_count.release()
             else:
                 mutex_hashpool.acquire()
                 hash_pool.submit(
@@ -342,26 +342,44 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
 
     hash_pool.submit(hash_dir_files, hash_func, project_dict, file_path)
 
-    while show_progress(g_hased_file_count, g_file_count, "正在计算哈希值"):
+    while show_progress(g_hased_file_count, g_file_count, "正在计算哈希"):
         time.sleep(0.05)
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
-    global g_diff_file_count
-    for name in project_dict:
-        if type(project_dict[name]) == str:
-            log.DEBUG("比较先后文件差异：", name)
-            global g_hadcompare_file_count
-            g_hadcompare_file_count += 1
-            if not g_rebuild and os.path.exists(g_build_path):
-                show_progress(g_diff_file_count, g_file_count, "正在比较差异")
-            if project_dict[name] == old_project_dict.get(name, ""):
-                project_dict[name] = ""
+    diff_pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
+    mutex_g_diff_file_count = Lock()
+    mutex_g_hadcompare_file_count = Lock()
+    mutex_diffpool = Lock()
+
+    def diff_dir_files(project_dict: dict, old_project_dict: dict):
+        global g_diff_file_count
+        nonlocal diff_pool, mutex_g_diff_file_count, mutex_g_hadcompare_file_count, mutex_diffpool
+        for name in project_dict:
+            if type(project_dict[name]) == str:
+                log.DEBUG("比较先后文件差异：", name)
+                global g_hadcompare_file_count
+                if project_dict[name] == old_project_dict.get(name, ""):
+                    project_dict[name] = ""
+                else:
+                    mutex_g_diff_file_count.acquire()
+                    g_diff_file_count += 1
+                    mutex_g_diff_file_count.release()
+                    project_dict[name] = "changed"
+                mutex_g_hadcompare_file_count.acquire()
+                g_hadcompare_file_count += 1
+                mutex_g_hadcompare_file_count.release()
             else:
-                g_diff_file_count += 1
-                project_dict[name] = "changed"
-        else:
-            diff_files(project_dict[name], old_project_dict.get(name, {}))
+                mutex_diffpool.acquire()
+                diff_pool.submit(
+                    diff_dir_files, project_dict[name], old_project_dict.get(name, {})
+                )
+                mutex_diffpool.release()
+
+    diff_pool.submit(diff_dir_files, project_dict, old_project_dict)
+
+    while show_progress(g_hadcompare_file_count, g_file_count, "正在比较差异"):
+        time.sleep(0.05)
 
 
 def tree_headers(relpath: str, project_dict: dict):
@@ -718,10 +736,7 @@ def exeute_complier_task(complier_cmd: list):
         res_ls.append(pool.submit(complier_progress, cmd, pid))
         pid += 1
 
-    while True:
-        show_progress(count, len(complier_cmd), "正在执行编译")
-        time.sleep(0.05)
-
+    while show_progress(count, len(complier_cmd), "正在执行编译"):
         for i in range(len(res_ls)):
             if not res_ls[i].done():
                 continue
@@ -745,10 +760,6 @@ def exeute_complier_task(complier_cmd: list):
                         else:
                             print(line, end="")
                 return False
-
-        if count == len(complier_cmd):
-            print(f"\r正在执行编译: [{'#'*50:.<50}] {count}/{len(complier_cmd)}")
-            break
 
     return True
 
@@ -788,10 +799,7 @@ def exeute_link_task(link_cmd: list):
     faild_count = 0
 
     faild_link = []
-    while True:
-        show_progress(count, len(link_cmd), "正在执行链接")
-        time.sleep(0.05)
-
+    while show_progress(count, len(link_cmd), "正在执行链接"):
         for i in range(len(res_ls)):
             if not res_ls[i].done() or i in faild_link:
                 continue
@@ -799,10 +807,6 @@ def exeute_link_task(link_cmd: list):
             if res != 0:
                 faild_link.append(i)
                 faild_count += 1
-
-        if count == len(link_cmd):
-            print(f"\r正在执行链接: [{'#'*50:.<50}] {count}/{len(link_cmd)}")
-            break
 
     for i in faild_link:
         log.ERROR(f"任务 {link_cmd[i].split()[2]} 链接失败！")
@@ -877,7 +881,6 @@ def complier(options: list):
     )
     log.INFO(f"正在计算{type_name_str}...")
     hash_file(hashlib.md5, dict_files, path)
-    print(f"\r正在计算哈希: [{'#'*50}] {g_file_count}/{g_file_count}")
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
     if os.path.exists(os.path.join(g_build_path, ".hash.pkl")):
@@ -887,10 +890,6 @@ def complier(options: list):
         os.mkdir(os.path.join(g_build_path, ".out"))
     # 比较哈希值
     diff_files(dict_files, old_dict_files)
-    if not g_rebuild:
-        print(
-            f"\r正在比较差异: [{'#'*50:.<50}] {g_file_count}/{g_file_count}",
-        )
     if not g_rebuild or not os.path.exists(g_build_path):
         global g_diff_file_count
         log.INFO(f"{g_diff_file_count} 个文件被更改")
@@ -942,8 +941,6 @@ def complier(options: list):
     log.DEBUG("编译命令：", *complier_cmd, sep="\n")
     log.DEBUG("编译命令：", *link_cmd, sep="\n")
 
-    Faild = False
-    LEN = 50
     # 执行编译命令
     if not exeute_complier_task(complier_cmd):
         return
