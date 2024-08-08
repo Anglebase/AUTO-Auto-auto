@@ -88,6 +88,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        print()
         log.WARNING("Auto 已被终止")
     except Exception as e:
         log.CRITICAL(f"发生错误: {e}")

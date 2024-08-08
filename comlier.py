@@ -458,9 +458,13 @@ def tree_headers(relpath: str, project_dict: dict):
 
     # 展开头文件依赖
     state = True
+    count = 0
     while state:
+        count += 1
         state = False
-        for header in header_dict:
+        for i in range(len(header_dict)):
+            show_progress(i, len(header_dict), "正在展开依赖(第" + str(count) + "次)")
+            header = list(header_dict.keys())[i]
             del_ls = []
             for reffile in header_dict[header]:
                 if reffile in header_dict or reffile == header:
