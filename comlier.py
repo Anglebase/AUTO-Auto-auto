@@ -24,6 +24,9 @@ build_path = ""
 
 include_parent_depth = 2
 
+diff_file_count = 0
+hadcompare_file_count = 0
+hased_file_count = 0
 
 def init():
     global has_build
@@ -58,6 +61,13 @@ def init():
     build_path = ""
     global include_parent_depth
     include_parent_depth = 2
+    global diff_file_count
+    diff_file_count = 0
+    global hadcompare_file_count
+    hadcompare_file_count = 0
+    
+    global hased_file_count
+    hased_file_count = 0
 
 
 def isLinux():
@@ -255,8 +265,6 @@ def get_floders_dict(path: str):
     return files_dict
 
 
-hased_file_count = 0
-
 
 def hash_file(hash_func: callable, project_dict: dict, file_path: str):
     global hased_file_count
@@ -285,8 +293,6 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
             hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
 
 
-diff_file_count = 0
-hadcompare_file_count = 0
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
@@ -534,6 +540,7 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
     link_list = []
     # log.DEBUG("链接文件：", *link_task.items(), sep="\n")
 
+    name_list = []
     # 生成链接命令
     for output_file, source_files in link_task.items():
         binaray_file = [
@@ -547,10 +554,8 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
             )
             for source_file in source_files
         ]
-        output_path = os.path.normpath(os.path.join(build_path, ".out"))
-        out_file_at = os.path.abspath(
-            os.path.join(output_path, os.path.dirname(output_file))
-        )
+        out_file_at = os.path.normpath(os.path.join(os.path.dirname(build_path), "out"))
+        
         if isWindows():
             extention_name = ".exe"
         elif isLinux():
@@ -562,10 +567,8 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
             out_file_at,
             ".".join(os.path.basename(output_file).split(".")[:-1]) + extention_name,
         )
-        try:
+        if not os.path.exists(out_file_at):
             os.makedirs(out_file_at)
-        except FileExistsError:
-            pass
         link_list.append(
             f"{gnu} -o {os.path.normpath(out_file)} {' '.join(binaray_file)}"
         )

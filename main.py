@@ -1,11 +1,12 @@
 from sys import argv
-from comlier import complier
-from linker import linker
+import comlier
+import linker
 import log, traceback
 
 
 VERSION = "0.1"
 log.level = log.Info
+
 
 def help():
     """
@@ -21,7 +22,7 @@ def help():
 
 def autoauto():
     """
-    #auto 
+    #auto
 
     auto auto {
         auto auto;
@@ -65,14 +66,16 @@ def main():
 
     # 执行命令
     for option in commends:
+        comlier.init()
+        linker.init()
         if option[0] == "-c":
-            complier(option[1:])
+            comlier.complier(option[1:])
         elif option[0] == "-v":
             log.INFO(f"AUTO Auto auto 版本: -v{VERSION}")
         elif option[0] == "-h":
             help()
         elif option[0] == "-l":
-            linker(option[1:])
+            linker.linker(option[1:])
         elif option[0] == "-auto-":
             autoauto()
         else:

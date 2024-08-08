@@ -35,6 +35,25 @@ L_dirs = []
 l_libs = []
 
 
+def init():
+    global linker_dir
+    linker_dir = "ar"
+    global link_file
+    link_file = []
+    global link_path
+    link_path = []
+    global output_type
+    output_type = ""
+    global output_name
+    output_name = ""
+    global root_path
+    root_path = os.getcwd()
+    global L_dirs
+    L_dirs = []
+    global l_libs
+    l_libs = []
+
+
 def set_optioins(options: list):
     if len(options) < 3:
         log.ERROR("缺少必要参数")
