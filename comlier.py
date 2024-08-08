@@ -463,10 +463,7 @@ def tree_headers(relpath: str, project_dict: dict):
         for header in header_dict:
             del_ls = []
             for reffile in header_dict[header]:
-                if reffile == header:
-                    log.ERROR(f"头文件 {header} 包含自身引用！")
-                    return None
-                if reffile in header_dict:
+                if reffile in header_dict or reffile == header:
                     del_ls.append(reffile)
                     state = True
             for reffile in del_ls:
