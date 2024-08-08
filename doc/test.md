@@ -28,6 +28,7 @@ auto -c .\jsoncpp\ /I=.\jsoncpp\include\
 ```
 输出如下：
 ![image](./autocI.png)
+> 自 v0.2 起，添加了父目录搜索级数 `/I:` 参数，它的默认值为 2 (`/I:2`)，即将头文件所在文件夹和该文件夹的父文件夹都加入搜索路径，这可以适用于大多数情况
 通过输出，可以看到项目有11个源文件，执行了6个链接任务。这6个链接任务便是 JsonCpp 中的示例程序，可以通过在编译时指定 `/run` 参数使 auto 运行示例程序，但无法向程序传递命令行参数：
 ```shell
 auto -c .\jsoncpp\ /I=.\jsoncpp\include\ /run
