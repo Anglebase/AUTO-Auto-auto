@@ -1,8 +1,24 @@
 import os, hashlib, pickle, copy, log
-import time
+import time, sys
 import shutil
 from concurrent.futures import ThreadPoolExecutor, Future
 from threading import Lock
+
+
+def show_progress(current, total, msg):
+    scount = int(current / total * 50)
+    whitespaces = len(str(total)) - len(str(current))
+    print(
+        f"\r{msg}: [{'#'*scount:.<50}] {whitespaces*' '}{current}/{total}",
+        end="",
+    )
+    sys.stdout.flush()
+    if current == total:
+        print()
+        return True
+    else:
+        return False
+
 
 g_has_build = False
 
@@ -287,30 +303,47 @@ def get_floders_dict(path: str):
 
 
 def hash_file(hash_func: callable, project_dict: dict, file_path: str):
-    global g_hased_file_count
-    for name in project_dict:
-        if type(project_dict[name]) == str:
-            with open(os.path.join(file_path, name), "rb") as f:
-                project_dict[name] = hash_func(f.read()).hexdigest()
-            scount = int(g_hased_file_count / g_file_count * 50)
-            whitespaces = len(str(g_file_count)) - len(str(g_hased_file_count))
-            print(
-                f"\r正在计算哈希: [{'#'*scount:.<50}] {whitespaces*' '}{g_hased_file_count}/{g_file_count}",
-                end="",
-            )
-            g_hased_file_count += 1
-            # 若是链接库自动追加搜索路径和链接参数
-            if islibirary(name):
-                global g_link, g_lib_dirs
-                g_lib_dirs.append(file_path)
-                if name.endswith(".a"):
-                    g_link.append(name[3:-2])
-                elif name.endswith(".so"):
-                    g_link.append(name[3:-3])
-                elif name.endswith(".lib"):
-                    g_link.append(name[:-4])
-        else:
-            hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
+    hash_pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
+    mutex_g_hased_file_count = Lock()
+    mutex_g_link_g_lib_dirs = Lock()
+    mutex_hashpool = Lock()
+
+    def hash_dir_files(hash_func: callable, project_dict: dict, file_path: str):
+        global g_hased_file_count
+        nonlocal hash_pool, mutex_g_hased_file_count, mutex_g_link_g_lib_dirs, mutex_hashpool
+        for name in project_dict:
+            if type(project_dict[name]) == str:
+                with open(os.path.join(file_path, name), "rb") as f:
+                    project_dict[name] = hash_func(f.read()).hexdigest()
+                mutex_g_hased_file_count.acquire()
+                g_hased_file_count += 1
+                mutex_g_hased_file_count.release()
+                # 若是链接库自动追加搜索路径和链接参数
+                mutex_g_link_g_lib_dirs.acquire()
+                if islibirary(name):
+                    global g_link, g_lib_dirs
+                    g_lib_dirs.append(file_path)
+                    if name.endswith(".a"):
+                        g_link.append(name[3:-2])
+                    elif name.endswith(".so"):
+                        g_link.append(name[3:-3])
+                    elif name.endswith(".lib"):
+                        g_link.append(name[:-4])
+                mutex_g_link_g_lib_dirs.release()
+            else:
+                mutex_hashpool.acquire()
+                hash_pool.submit(
+                    hash_dir_files,
+                    hash_func,
+                    project_dict[name],
+                    os.path.join(file_path, name),
+                )
+                mutex_hashpool.release()
+
+    hash_pool.submit(hash_dir_files, hash_func, project_dict, file_path)
+
+    while show_progress(g_hased_file_count, g_file_count, "正在计算哈希值"):
+        time.sleep(0.05)
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
@@ -321,10 +354,7 @@ def diff_files(project_dict: dict, old_project_dict: dict):
             global g_hadcompare_file_count
             g_hadcompare_file_count += 1
             if not g_rebuild and os.path.exists(g_build_path):
-                print(
-                    f"\r正在比较差异: [{'#'*int(g_diff_file_count/g_file_count*50):.<50}] {g_diff_file_count}/{g_file_count}",
-                    end="",
-                )
+                show_progress(g_diff_file_count, g_file_count, "正在比较差异")
             if project_dict[name] == old_project_dict.get(name, ""):
                 project_dict[name] = ""
             else:
@@ -689,10 +719,7 @@ def exeute_complier_task(complier_cmd: list):
         pid += 1
 
     while True:
-        print(
-            f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*50):.<50}] {count}/{len(complier_cmd)}",
-            end="",
-        )
+        show_progress(count, len(complier_cmd), "正在执行编译")
         time.sleep(0.05)
 
         for i in range(len(res_ls)):
@@ -743,7 +770,9 @@ def exeute_link_task(link_cmd: list):
             os.path.join(g_build_path, f".link_{pid}.log"), "a", encoding="utf-8"
         ) as f:
             pass
-        res = os.system(f"{cmd} 1>>{os.path.join(g_build_path, f'.link_{pid}.log')} 2>&1")
+        res = os.system(
+            f"{cmd} 1>>{os.path.join(g_build_path, f'.link_{pid}.log')} 2>&1"
+        )
         mutex.acquire()
         count += 1
         mutex.release()
@@ -760,10 +789,8 @@ def exeute_link_task(link_cmd: list):
 
     faild_link = []
     while True:
-        print(
-            f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*50):.<50}] {count}/{len(link_cmd)}",
-            end="",
-        )
+        show_progress(count, len(link_cmd), "正在执行链接")
+        time.sleep(0.05)
 
         for i in range(len(res_ls)):
             if not res_ls[i].done() or i in faild_link:
@@ -772,8 +799,6 @@ def exeute_link_task(link_cmd: list):
             if res != 0:
                 faild_link.append(i)
                 faild_count += 1
-
-        # time.sleep(0.1)
 
         if count == len(link_cmd):
             print(f"\r正在执行链接: [{'#'*50:.<50}] {count}/{len(link_cmd)}")
@@ -847,7 +872,9 @@ def complier(options: list):
         log.ERROR(f"找不到编译器: {g_gnu}")
         return
     # 计算每个文件的哈希值
-    type_name_str = "哈希值" if g_rebuild or not os.path.exists(g_build_path) else "差异"
+    type_name_str = (
+        "哈希值" if g_rebuild or not os.path.exists(g_build_path) else "差异"
+    )
     log.INFO(f"正在计算{type_name_str}...")
     hash_file(hashlib.md5, dict_files, path)
     print(f"\r正在计算哈希: [{'#'*50}] {g_file_count}/{g_file_count}")
@@ -886,7 +913,9 @@ def complier(options: list):
     # 添加头文件搜索路径
     global g_include_dirs
     for item in header_dict:
-        g_include_dirs.append(os.path.abspath(os.path.join(path, os.path.dirname(item))))
+        g_include_dirs.append(
+            os.path.abspath(os.path.join(path, os.path.dirname(item)))
+        )
     g_include_dirs = list(set(g_include_dirs))
 
     log.INFO("正在生成任务...")
