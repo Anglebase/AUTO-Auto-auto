@@ -24,7 +24,7 @@ file_count = 0
 source_file_count = 0
 
 build_path = ""
-max_thread_every_cpu = 10
+max_thread_every_cpu = 5
 
 include_parent_depth = 2
 
@@ -76,6 +76,8 @@ def init():
     hased_file_count = 0
     global output_path
     output_path = "out"
+    global max_thread_every_cpu
+    max_thread_every_cpu = 5
 
 
 def isLinux():
@@ -128,7 +130,7 @@ def set_options(option: list):
         /win                强制采用Windows命名风格编译(.obj)
         /unix               强制采用Linux命名风格编译(.o)
         /all                显示更加详细的输出信息
-        /th=                指定单核最大并发编译线程数，默认为10
+        /th=                指定单核最大并发编译线程数，默认为5
         /out=               指定结果输出目录，默认为out
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
@@ -728,7 +730,75 @@ def exeute_complier_task(complier_cmd: list):
 def exeute_link_task(link_cmd: list):
     if not link_cmd:
         log.INFO("没有需要链接的文件")
-        return
+        return True
+    count = 0
+    pid = 0
+    mutex = Lock()
+    log.INFO("正在执行链接...")
+    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * max_thread_every_cpu)
+
+    def link_progress(cmd: str, pid: int):
+        nonlocal count, mutex
+        log.DEBUG(f"链接进程 {pid} 开始执行：{cmd}")
+        with open(
+            os.path.join(build_path, f".link_{pid}.log"), "a", encoding="utf-8"
+        ) as f:
+            pass
+        res = os.system(f"{cmd} 1>>{os.path.join(build_path, f'.link_{pid}.log')} 2>&1")
+        mutex.acquire()
+        count += 1
+        mutex.release()
+        return res
+
+    res_ls: list[Future] = []
+
+    log.INFO("正在提交链接任务...")
+    for cmd in link_cmd:
+        res_ls.append(pool.submit(link_progress, cmd, pid))
+        pid += 1
+
+    faild_count = 0
+
+    while True:
+        print(
+            f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*50):.<50}] {count}/{len(link_cmd)}",
+            end="",
+        )
+
+        for i in range(len(res_ls)):
+            if not res_ls[i].done():
+                continue
+            res = res_ls[i].result()
+            if res != 0:
+                print()
+                log.ERROR(f"任务 {i} 链接失败！")
+                with open(
+                    os.path.join(build_path, f".link_{i}.log"),
+                    "r",
+                    encoding="utf-8",
+                ) as f:
+                    log.INFO(f"任务 {i} 的链接器输出：")
+                    for line in f:
+                        for item in line.split():
+                            if item in ["undefined", "reference"]:
+                                print("\033[31m" + item + "\033[0m", end=" ")
+                            elif item in ["multiple", "definition"]:
+                                print("\033[33m" + item + "\033[0m", end=" ")
+                            else:
+                                print(item, end=" ")
+                        print()
+                faild_count += 1
+
+        time.sleep(0.1)
+        if count == len(link_cmd):
+            print(f"\r正在执行链接: [{'#'*50:.<50}] {count}/{len(link_cmd)}")
+            break
+    
+    log.INFO(f"链接完成: {len(link_cmd) - faild_count}/{len(link_cmd)}")
+    if faild_count:
+        log.ERROR(f"链接失败: {faild_count}/{len(link_cmd)}")
+
+    return not faild_count
 
 
 def complier(options: list):
@@ -826,7 +896,7 @@ def complier(options: list):
 
     include_dirs = include_extend(include_dirs)
 
-    log.DEBUG("GNU：", gnu)
+    log.DEBUG("编译器：", gnu)
     log.DEBUG("标准：", std)
     log.DEBUG("头文件搜索路径：", include_dirs)
     log.DEBUG("库文件搜索路径：", lib_dirs)
@@ -850,48 +920,12 @@ def complier(options: list):
     with open(os.path.join(build_path, ".hash.pkl"), "wb") as f:
         pickle.dump(new_dict_files, f)
 
-    if link_cmd:
-        log.INFO("正在执行链接任务...")
-        count = 0
-        f_count = 0
-        with open(os.path.join(build_path, ".link.log"), "w", encoding="utf-8") as f:
-            pass
-        for cmd in link_cmd:
-            count += 1
-            res = os.system(f"{cmd} 1>>{os.path.join(build_path, '.link.log')} 2>&1")
-            print(
-                f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*LEN):.<50}] {count}/{len(link_cmd)}",
-                end="",
-            )
-            if res != 0:
-                f_count += 1
-                Faild = True
-        print()
-        log.INFO(f"链接成功！{len(link_cmd)-f_count}/{len(link_cmd)}")
-        if f_count != 0:
-            log.ERROR(f"链接失败！{f_count}/{len(link_cmd)}")
-            print("链接器输出：")
-            with open(
-                os.path.join(build_path, ".link.log"), "r", encoding="utf-8"
-            ) as f:
-                for line in f:
-                    for item in line.split():
-                        if item in ["undefined", "reference"]:
-                            print("\033[31m" + item + "\033[0m", end=" ")
-                        elif item in ["multiple", "definition"]:
-                            print("\033[33m" + item + "\033[0m", end=" ")
-                        else:
-                            print(item, end=" ")
-                    print()
-    else:
-        log.INFO("没有需要链接的文件")
-
-    if Faild:
-        return
+    # 执行链接命令
+    link_res = exeute_link_task(link_cmd)
 
     log.INFO("编译完成！")
 
-    if run:
+    if run and link_res:
         log.INFO("正在启用运行...")
         for root, dirs, pragrams in os.walk(os.path.join(path, output_path)):
             for pragram in pragrams:
