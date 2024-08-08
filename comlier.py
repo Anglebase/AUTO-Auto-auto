@@ -694,6 +694,7 @@ def exeute_complier_task(complier_cmd: list):
             f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*50):.<50}] {count}/{len(complier_cmd)}",
             end="",
         )
+        time.sleep(0.05)
 
         for i in range(len(res_ls)):
             if not res_ls[i].done():
@@ -701,7 +702,7 @@ def exeute_complier_task(complier_cmd: list):
             res = res_ls[i].result()
             if res != 0:
                 print()
-                log.ERROR(f"任务 {i} 编译失败！")
+                log.ERROR(f"任务 {complier_cmd[i].split()[3]} 编译失败！")
                 with open(
                     os.path.join(build_path, f".complier_{i}.log"),
                     "r",
@@ -718,8 +719,7 @@ def exeute_complier_task(complier_cmd: list):
                         else:
                             print(line, end="")
                 return False
-
-        time.sleep(0.1)
+            
         if count == len(complier_cmd):
             print(f"\r正在执行编译: [{'#'*50:.<50}] {count}/{len(complier_cmd)}")
             break
@@ -759,6 +759,7 @@ def exeute_link_task(link_cmd: list):
 
     faild_count = 0
 
+    faild_link = []
     while True:
         print(
             f"\r正在执行链接: [{'#'*int(count/len(link_cmd)*50):.<50}] {count}/{len(link_cmd)}",
@@ -766,34 +767,37 @@ def exeute_link_task(link_cmd: list):
         )
 
         for i in range(len(res_ls)):
-            if not res_ls[i].done():
+            if not res_ls[i].done() or i in faild_link:
                 continue
             res = res_ls[i].result()
             if res != 0:
-                print()
-                log.ERROR(f"任务 {i} 链接失败！")
-                with open(
-                    os.path.join(build_path, f".link_{i}.log"),
-                    "r",
-                    encoding="utf-8",
-                ) as f:
-                    log.INFO(f"任务 {i} 的链接器输出：")
-                    for line in f:
-                        for item in line.split():
-                            if item in ["undefined", "reference"]:
-                                print("\033[31m" + item + "\033[0m", end=" ")
-                            elif item in ["multiple", "definition"]:
-                                print("\033[33m" + item + "\033[0m", end=" ")
-                            else:
-                                print(item, end=" ")
-                        print()
+                faild_link.append(i)
                 faild_count += 1
 
-        time.sleep(0.1)
+        # time.sleep(0.1)
+
         if count == len(link_cmd):
             print(f"\r正在执行链接: [{'#'*50:.<50}] {count}/{len(link_cmd)}")
             break
-    
+
+    for i in faild_link:
+        log.ERROR(f"任务 {link_cmd[i].split()[2]} 链接失败！")
+        with open(
+            os.path.join(build_path, f".link_{i}.log"),
+            "r",
+            encoding="utf-8",
+        ) as f:
+            log.INFO(f"任务 {link_cmd[i].split()[2]} 的链接器输出：")
+            for line in f:
+                for item in line.split():
+                    if item in ["undefined", "reference"]:
+                        print("\033[31m" + item + "\033[0m", end=" ")
+                    elif item in ["multiple", "definition"]:
+                        print("\033[33m" + item + "\033[0m", end=" ")
+                    else:
+                        print(item, end=" ")
+                print()
+
     log.INFO(f"链接完成: {len(link_cmd) - faild_count}/{len(link_cmd)}")
     if faild_count:
         log.ERROR(f"链接失败: {faild_count}/{len(link_cmd)}")
