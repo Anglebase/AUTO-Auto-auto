@@ -24,36 +24,36 @@ def help():
     print(help.__doc__)
 
 
-linker_dir = "ar"
-link_file = []
-link_path = []
-output_type = ""
-output_name = ""
-root_path = os.getcwd()
+g_linker_dir = "ar"
+g_link_file = []
+g_link_path = []
+g_output_type = ""
+g_output_name = ""
+g_root_path = os.getcwd()
 
-L_dirs = []
-l_libs = []
-output_path = "lib"
+g_L_dirs = []
+g_l_libs = []
+g_output_path = "lib"
 
 def init():
-    global linker_dir
-    linker_dir = "ar"
-    global link_file
-    link_file = []
-    global link_path
-    link_path = []
-    global output_type
-    output_type = ""
-    global output_name
-    output_name = ""
-    global root_path
-    root_path = os.getcwd()
-    global L_dirs
-    L_dirs = []
-    global l_libs
-    l_libs = []
-    global output_path
-    output_path = "lib"
+    global g_linker_dir
+    g_linker_dir = "ar"
+    global g_link_file
+    g_link_file = []
+    global g_link_path
+    g_link_path = []
+    global g_output_type
+    g_output_type = ""
+    global g_output_name
+    g_output_name = ""
+    global g_root_path
+    g_root_path = os.getcwd()
+    global g_L_dirs
+    g_L_dirs = []
+    global g_l_libs
+    g_l_libs = []
+    global g_output_path
+    g_output_path = "lib"
 
 
 def set_optioins(options: list):
@@ -61,18 +61,18 @@ def set_optioins(options: list):
         log.ERROR("缺少必要参数")
         return False
 
-    global output_type
+    global g_output_type
     if options[0] in ["/shared", "/static"]:
         if isWindows():
             if options[0] == "/shared":
-                output_type = "dll"
+                g_output_type = "dll"
             else:
-                output_type = "lib"
+                g_output_type = "lib"
         elif isLinux():
             if options[0] == "/shared":
-                output_type = "so"
+                g_output_type = "so"
             else:
-                output_type = "a"
+                g_output_type = "a"
         else:
             log.ERROR("不支持当前系统")
             return False
@@ -80,11 +80,11 @@ def set_optioins(options: list):
         log.ERROR(f"无效的输出目标'{options[0]}'")
         return False
 
-    global output_name
-    output_name = options[1]
-    for ch in output_name:
+    global g_output_name
+    g_output_name = options[1]
+    for ch in g_output_name:
         if not ch.isalnum() and ch not in ["_", "."]:
-            log.ERROR(f"输出文件名'{output_name}'不合法")
+            log.ERROR(f"输出文件名'{g_output_name}'不合法")
             return False
 
     nametype = "windows" if isWindows() else "linux"
@@ -92,31 +92,31 @@ def set_optioins(options: list):
     for i in range(2, len(options)):
         if options[i].startswith("/file+="):
             file_path = options[i][7:]
-            if output_type in ["dll", "lib"]:
+            if g_output_type in ["dll", "lib"]:
                 if not file_path.endswith(".obj"):
                     if issource(file_path):
                         file_path = ".".join(file_path.split(".")[:-1]) + ".obj"
                     else:
                         file_path += ".obj"
-            elif output_type in ["a", "so"]:
+            elif g_output_type in ["a", "so"]:
                 if not file_path.endswith(".o"):
                     if issource(file_path):
                         file_path = ".".join(file_path.split(".")[:-1]) + ".o"
                     else:
                         file_path += ".o"
-            link_file.append(file_path)
+            g_link_file.append(file_path)
         elif options[i].startswith("/path+="):
-            link_path.append(options[i][7:])
+            g_link_path.append(options[i][7:])
         elif options[i].startswith("/at="):
-            global root_path
-            root_path = os.path.abspath(options[i][4:])
+            global g_root_path
+            g_root_path = os.path.abspath(options[i][4:])
         elif options[i].startswith("/L="):
-            L_dirs.extend(options[i][3:].split(","))
+            g_L_dirs.extend(options[i][3:].split(","))
         elif options[i].startswith("/l="):
-            l_libs.extend(options[i][3:].split(","))
+            g_l_libs.extend(options[i][3:].split(","))
         elif options[i].startswith("/lnkr="):
-            global linker_dir
-            linker_dir = options[i][6:]
+            global g_linker_dir
+            g_linker_dir = options[i][6:]
         elif options[i] in ["/unix", "/win"]:
             if options[i] == "/unix":
                 nametype = "linux"
@@ -127,15 +127,15 @@ def set_optioins(options: list):
             return False
 
         if nametype == "windows":
-            if output_type == "so":
-                output_type = "dll"
-            elif output_type == "a":
-                output_type = "lib"
+            if g_output_type == "so":
+                g_output_type = "dll"
+            elif g_output_type == "a":
+                g_output_type = "lib"
         elif nametype == "linux":
-            if output_type == "dll":
-                output_type = "so"
-            elif output_type == "lib":
-                output_type = "a"
+            if g_output_type == "dll":
+                g_output_type = "so"
+            elif g_output_type == "lib":
+                g_output_type = "a"
 
     return True
 
@@ -147,19 +147,19 @@ def linker(options: list):
     if not set_optioins(options):
         return
 
-    for i in range(len(link_path)):
-        link_path[i] = os.path.relpath(link_path[i], root_path)
-    for i in range(len(link_file)):
-        link_file[i] = os.path.relpath(link_file[i], root_path)
+    for i in range(len(g_link_path)):
+        g_link_path[i] = os.path.relpath(g_link_path[i], g_root_path)
+    for i in range(len(g_link_file)):
+        g_link_file[i] = os.path.relpath(g_link_file[i], g_root_path)
 
-    log.DEBUG(f"输出目标: {output_type}")
-    log.DEBUG(f"输出文件名: {output_name}")
-    log.DEBUG(f"链接源文件: {link_file}")
-    log.DEBUG(f"链接源目录: {link_path}")
-    log.DEBUG(f"执行目录: {root_path}")
+    log.DEBUG(f"输出目标: {g_output_type}")
+    log.DEBUG(f"输出文件名: {g_output_name}")
+    log.DEBUG(f"链接源文件: {g_link_file}")
+    log.DEBUG(f"链接源目录: {g_link_path}")
+    log.DEBUG(f"执行目录: {g_root_path}")
 
-    build_dir = os.path.join(root_path, ".build")
-    os.chdir(root_path)
+    build_dir = os.path.join(g_root_path, ".build")
+    os.chdir(g_root_path)
     if not os.path.exists(build_dir):
         log.ERROR(
             "没有找到 '.build' 目录，请先运行 '-c' 命令编译项目或通过 '/at=' 指定源项目路径"
@@ -167,11 +167,11 @@ def linker(options: list):
         return
 
     files_list = []
-    files_list.extend(link_file)
+    files_list.extend(g_link_file)
 
     log.DEBUG(f"链接源文件: {files_list}")
 
-    for path in link_path:
+    for path in g_link_path:
         for root, dirs, files in os.walk(path):
             log.DEBUG(f"搜索目录: {root}")
             log.DEBUG(f"搜索文件: {files}")
@@ -209,41 +209,41 @@ def linker(options: list):
     for i in range(len(files_list)):
         if not os.path.isabs(files_list[i]):
             if ".build" in files_list[i]:
-                files_list[i] = os.path.join(root_path, files_list[i])
+                files_list[i] = os.path.join(g_root_path, files_list[i])
             else:
                 files_list[i] = os.path.join(build_dir, files_list[i])
         else:
             files_list[i] = os.path.abspath(files_list[i])
         files_list[i] = os.path.normpath(files_list[i])
 
-    global output_path
+    global g_output_path
     log.DEBUG(f"链接源文件: {files_list}")
-    if os.path.isabs(output_path):
-        output_path = os.path.join(output_path, output_name)
-        output_path_unix = os.path.join(output_path, "lib" + output_name)
+    if os.path.isabs(g_output_path):
+        g_output_path = os.path.join(g_output_path, g_output_name)
+        output_path_unix = os.path.join(g_output_path, "lib" + g_output_name)
     else:
-        output_path = os.path.join(root_path, os.path.join(output_path, output_name))
-        output_path_unix = os.path.join(root_path, os.path.join(output_path, "lib" + output_name))
+        g_output_path = os.path.join(g_root_path, os.path.join(g_output_path, g_output_name))
+        output_path_unix = os.path.join(g_root_path, os.path.join(g_output_path, "lib" + g_output_name))
     
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    if not os.path.exists(g_output_path):
+        os.makedirs(g_output_path)
 
-    L_args = " ".join(["-L" + d for d in L_dirs]) if L_dirs else ""
-    l_args = " ".join(["-l" + l for l in l_libs]) if l_libs else ""
+    L_args = " ".join(["-L" + d for d in g_L_dirs]) if g_L_dirs else ""
+    l_args = " ".join(["-l" + l for l in g_l_libs]) if g_l_libs else ""
     log.DEBUG(f"链接库搜索路径: {L_args}")
     log.DEBUG(f"链接库: {l_args}")
 
-    global linker_dir
-    log.DEBUG(f"静态链接器路径: {linker_dir}")
-    if output_type == "lib":
-        linker_cmd = f"{linker_dir} rs {output_path}.lib {' '.join(files_list)}"
-    elif output_type == "dll":
+    global g_linker_dir
+    log.DEBUG(f"静态链接器路径: {g_linker_dir}")
+    if g_output_type == "lib":
+        linker_cmd = f"{g_linker_dir} rs {g_output_path}.lib {' '.join(files_list)}"
+    elif g_output_type == "dll":
         linker_cmd = (
-            f"g++ -shared -o {output_path}.dll {' '.join(files_list)} {L_args} {l_args}"
+            f"g++ -shared -o {g_output_path}.dll {' '.join(files_list)} {L_args} {l_args}"
         )
-    elif output_type == "a":
-        linker_cmd = f"{linker_dir} rs {output_path_unix}.a {' '.join(files_list)}"
-    elif output_type == "so":
+    elif g_output_type == "a":
+        linker_cmd = f"{g_linker_dir} rs {output_path_unix}.a {' '.join(files_list)}"
+    elif g_output_type == "so":
         linker_cmd = f"g++ -shared -o {output_path_unix}.so {' '.join(files_list)} {L_args} {l_args}"
 
     log.DEBUG(f"链接命令: {linker_cmd}")
@@ -262,7 +262,7 @@ def linker(options: list):
                         print(word, end=" ")
                 print()
     else:
-        log.INFO(f"链接成功，输出文件位于: {os.path.dirname(output_path)}")
+        log.INFO(f"链接成功，输出文件位于: {os.path.dirname(g_output_path)}")
 
 
 if __name__ == "__main__":

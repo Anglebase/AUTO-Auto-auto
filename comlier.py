@@ -4,80 +4,80 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, Future
 from threading import Lock
 
-has_build = False
+g_has_build = False
 
 # 忽略的文件夹
-ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
+g_ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
 # 同时忽略所有以.或_开头的文件和文件夹
 
-gnu = "g++"
-std = "c++17"
-include_dirs = []
-lib_dirs = []
-link = []
-c_options = []
-defines = []
-rebuild = False
-run = False
+g_gnu = "g++"
+g_std = "c++17"
+g_include_dirs = []
+g_lib_dirs = []
+g_link = []
+g_c_options = []
+g_defines = []
+g_rebuild = False
+g_run = False
 
-file_count = 0
-source_file_count = 0
+g_file_count = 0
+g_source_file_count = 0
 
-build_path = ""
-max_thread_every_cpu = 5
+g_build_path = ""
+g_max_thread_every_cpu = 5
 
-include_parent_depth = 2
+g_include_parent_depth = 2
 
-diff_file_count = 0
-hadcompare_file_count = 0
-hased_file_count = 0
-output_path = "out"
+g_diff_file_count = 0
+g_hadcompare_file_count = 0
+g_hased_file_count = 0
+g_output_path = "out"
 
 
 def init():
-    global has_build
-    has_build = False
+    global g_has_build
+    g_has_build = False
     # 忽略的文件夹
-    global ignore_floders
-    ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
+    global g_ignore_floders
+    g_ignore_floders = ["build", "dist", "venv", "docs", "out", "bin"]
     # 同时忽略所有以.或_开头的文件和文件夹
-    global gnu
-    gnu = "g++"
-    global std
-    std = "c++17"
-    global include_dirs
-    include_dirs = []
-    global lib_dirs
-    lib_dirs = []
-    global link
-    link = []
-    global c_options
-    c_options = []
-    global defines
-    defines = []
-    global rebuild
-    rebuild = False
-    global run
-    run = False
-    global file_count
-    file_count = 0
-    global source_file_count
-    source_file_count = 0
-    global build_path
-    build_path = ""
-    global include_parent_depth
-    include_parent_depth = 2
-    global diff_file_count
-    diff_file_count = 0
-    global hadcompare_file_count
-    hadcompare_file_count = 0
+    global g_gnu
+    g_gnu = "g++"
+    global g_std
+    g_std = "c++17"
+    global g_include_dirs
+    g_include_dirs = []
+    global g_lib_dirs
+    g_lib_dirs = []
+    global g_link
+    g_link = []
+    global g_c_options
+    g_c_options = []
+    global g_defines
+    g_defines = []
+    global g_rebuild
+    g_rebuild = False
+    global g_run
+    g_run = False
+    global g_file_count
+    g_file_count = 0
+    global g_source_file_count
+    g_source_file_count = 0
+    global g_build_path
+    g_build_path = ""
+    global g_include_parent_depth
+    g_include_parent_depth = 2
+    global g_diff_file_count
+    g_diff_file_count = 0
+    global g_hadcompare_file_count
+    g_hadcompare_file_count = 0
 
-    global hased_file_count
-    hased_file_count = 0
-    global output_path
-    output_path = "out"
-    global max_thread_every_cpu
-    max_thread_every_cpu = 5
+    global g_hased_file_count
+    g_hased_file_count = 0
+    global g_output_path
+    g_output_path = "out"
+    global g_max_thread_every_cpu
+    g_max_thread_every_cpu = 5
 
 
 def isLinux():
@@ -146,61 +146,61 @@ def set_options(option: list):
     """
     for item in option:
         if item.startswith("/cpr="):
-            global gnu
-            gnu = item[5:]
-            if not gnu:
-                gnu = "g++"
+            global g_gnu
+            g_gnu = item[5:]
+            if not g_gnu:
+                g_gnu = "g++"
         elif item.startswith("/std="):
-            global std
-            std = item[5:]
-            if not std:
-                std = "c++17"
+            global g_std
+            g_std = item[5:]
+            if not g_std:
+                g_std = "c++17"
             if (
-                gnu == "g++"
-                or os.path.basename(gnu).startswith("g++")
-                or gnu == "clang++"
-                or os.path.basename(gnu).startswith("clang++")
+                g_gnu == "g++"
+                or os.path.basename(g_gnu).startswith("g++")
+                or g_gnu == "clang++"
+                or os.path.basename(g_gnu).startswith("clang++")
             ):
-                if std not in ["c++11", "c++14", "c++17", "c++20"]:
-                    log.WARNING("无效的语言标准：", std)
+                if g_std not in ["c++11", "c++14", "c++17", "c++20"]:
+                    log.WARNING("无效的语言标准：", g_std)
                     log.WARNING("已使用默认语言标准：", "c++17")
-                    std = "c++17"
+                    g_std = "c++17"
             elif (
-                gnu == "gcc"
-                or os.path.basename(gnu).startswith("gcc")
-                or gnu == "clang"
-                or os.path.basename(gnu).startswith("clang")
+                g_gnu == "gcc"
+                or os.path.basename(g_gnu).startswith("gcc")
+                or g_gnu == "clang"
+                or os.path.basename(g_gnu).startswith("clang")
             ):
-                if std not in ["c99", "c11"]:
-                    log.WARNING("无效的语言标准：", std)
+                if g_std not in ["c99", "c11"]:
+                    log.WARNING("无效的语言标准：", g_std)
                     log.WARNING("已使用默认语言标准：", "c11")
-                    std = "c11"
+                    g_std = "c11"
         elif item.startswith("/I="):
-            global include_dirs
-            include_dirs.extend(item[3:].split(","))
+            global g_include_dirs
+            g_include_dirs.extend(item[3:].split(","))
         elif item.startswith("/L="):
-            global lib_dirs
-            lib_dirs.extend(item[3:].split(","))
+            global g_lib_dirs
+            g_lib_dirs.extend(item[3:].split(","))
         elif item.startswith("/l="):
-            global link
-            link.extend(item[3:].split(","))
+            global g_link
+            g_link.extend(item[3:].split(","))
         elif item.startswith("/opt="):
-            global c_options
-            c_options.extend(item[5:].split(","))
+            global g_c_options
+            g_c_options.extend(item[5:].split(","))
         elif item.startswith("/D="):
-            global defines
-            defines.extend(item[3:].split(","))
+            global g_defines
+            g_defines.extend(item[3:].split(","))
         elif item.startswith("/ign="):
-            global ignore_floders
-            ignore_floders = item[5:].split(",")
-            for item in ignore_floders:
+            global g_ignore_floders
+            g_ignore_floders = item[5:].split(",")
+            for item in g_ignore_floders:
                 for ch in item:
                     if ch in '/\\<>*:?"':
                         log.ERROR(f"'{item}'不是文件夹名")
                         return False
         elif item.startswith("/ign+="):
-            ignore_floders.extend(item[6:].split(","))
-            for item in ignore_floders:
+            g_ignore_floders.extend(item[6:].split(","))
+            for item in g_ignore_floders:
                 for ch in item:
                     if ch in '/\\<>*:?"':
                         log.ERROR(f"'{item}'不是文件夹名")
@@ -210,11 +210,11 @@ def set_options(option: list):
             print(set_options.__doc__)
             return False
         elif item == "/rebuild":
-            global rebuild
-            rebuild = True
+            global g_rebuild
+            g_rebuild = True
         elif item == "/run":
-            global run
-            run = True
+            global g_run
+            g_run = True
         elif item == "/win":
             global sys_type
             sys_type = "windows"
@@ -223,19 +223,19 @@ def set_options(option: list):
         elif item == "/all":
             log.more = True
         elif item.startswith("/I:"):
-            global include_parent_depth
+            global g_include_parent_depth
             if item[3:].isdigit():
-                include_parent_depth = int(item[3:])
+                g_include_parent_depth = int(item[3:])
             else:
                 log.ERROR("选项参数必须为数字：", item)
                 return False
         elif item.startswith("/out="):
-            global output_path
-            output_path = item[5:]
+            global g_output_path
+            g_output_path = item[5:]
         elif item.startswith("/th="):
-            global max_thread_every_cpu
+            global g_max_thread_every_cpu
             if item[4:].isdigit():
-                max_thread_every_cpu = int(item[4:])
+                g_max_thread_every_cpu = int(item[4:])
             else:
                 log.ERROR("选项参数必须为数字：", item)
                 return False
@@ -251,7 +251,7 @@ def get_floders_dict(path: str):
     files_dict = {}
 
     def get_files(path: str, files_dict: dict):
-        global file_count
+        global g_file_count
         # print(path, files_dict)
         for root, dirs, files in os.walk(path):
             # print(root, dirs, files)
@@ -261,7 +261,7 @@ def get_floders_dict(path: str):
                         files_dict[dir] = {}
                     log.DEBUG("读取到文件夹：", os.path.join(root, dir))
                     if (
-                        dir not in ignore_floders
+                        dir not in g_ignore_floders
                         and not dir.startswith(".")
                         and not dir.startswith("_")
                     ):
@@ -274,61 +274,61 @@ def get_floders_dict(path: str):
                     log.INFO("已忽略文件:\t", os.path.join(root, file))
                     continue
                 files_dict[file] = "new"
-                file_count += 1
-                global source_file_count
+                g_file_count += 1
+                global g_source_file_count
                 if issource(file) or isheader(file):
-                    source_file_count += 1
+                    g_source_file_count += 1
             break
 
     get_files(path, files_dict)
-    log.INFO("搜索到文件数：", file_count)
-    log.DEBUG("检索到源/头文件数：", source_file_count)
+    log.INFO("搜索到文件数：", g_file_count)
+    log.DEBUG("检索到源/头文件数：", g_source_file_count)
     return files_dict
 
 
 def hash_file(hash_func: callable, project_dict: dict, file_path: str):
-    global hased_file_count
+    global g_hased_file_count
     for name in project_dict:
         if type(project_dict[name]) == str:
             with open(os.path.join(file_path, name), "rb") as f:
                 project_dict[name] = hash_func(f.read()).hexdigest()
-            scount = int(hased_file_count / file_count * 50)
-            whitespaces = len(str(file_count)) - len(str(hased_file_count))
+            scount = int(g_hased_file_count / g_file_count * 50)
+            whitespaces = len(str(g_file_count)) - len(str(g_hased_file_count))
             print(
-                f"\r正在计算哈希: [{'#'*scount:.<50}] {whitespaces*' '}{hased_file_count}/{file_count}",
+                f"\r正在计算哈希: [{'#'*scount:.<50}] {whitespaces*' '}{g_hased_file_count}/{g_file_count}",
                 end="",
             )
-            hased_file_count += 1
+            g_hased_file_count += 1
             # 若是链接库自动追加搜索路径和链接参数
             if islibirary(name):
-                global link, lib_dirs
-                lib_dirs.append(file_path)
+                global g_link, g_lib_dirs
+                g_lib_dirs.append(file_path)
                 if name.endswith(".a"):
-                    link.append(name[3:-2])
+                    g_link.append(name[3:-2])
                 elif name.endswith(".so"):
-                    link.append(name[3:-3])
+                    g_link.append(name[3:-3])
                 elif name.endswith(".lib"):
-                    link.append(name[:-4])
+                    g_link.append(name[:-4])
         else:
             hash_file(hash_func, project_dict[name], os.path.join(file_path, name))
 
 
 def diff_files(project_dict: dict, old_project_dict: dict):
-    global diff_file_count
+    global g_diff_file_count
     for name in project_dict:
         if type(project_dict[name]) == str:
             log.DEBUG("比较先后文件差异：", name)
-            global hadcompare_file_count
-            hadcompare_file_count += 1
-            if not rebuild and os.path.exists(build_path):
+            global g_hadcompare_file_count
+            g_hadcompare_file_count += 1
+            if not g_rebuild and os.path.exists(g_build_path):
                 print(
-                    f"\r正在比较差异: [{'#'*int(diff_file_count/file_count*50):.<50}] {diff_file_count}/{file_count}",
+                    f"\r正在比较差异: [{'#'*int(g_diff_file_count/g_file_count*50):.<50}] {g_diff_file_count}/{g_file_count}",
                     end="",
                 )
             if project_dict[name] == old_project_dict.get(name, ""):
                 project_dict[name] = ""
             else:
-                diff_file_count += 1
+                g_diff_file_count += 1
                 project_dict[name] = "changed"
         else:
             diff_files(project_dict[name], old_project_dict.get(name, {}))
@@ -583,15 +583,15 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
     ]
     log.DEBUG("源文件：", *source_list, sep="\n")
     complier_list = [
-        f"{gnu} -std={std} -c {srcfile} -o {output_file}"
+        f"{g_gnu} -std={g_std} -c {srcfile} -o {output_file}"
         for srcfile, output_file in zip(source_list, output_list)
     ]
     for i in range(len(complier_list)):
         complier_list[i] += " ".join(
-            [f" -I {include_dir}" for include_dir in include_dirs]
+            [f" -I {include_dir}" for include_dir in g_include_dirs]
         )
-        complier_list[i] += " ".join([f" -D{define}" for define in defines])
-        complier_list[i] += " ".join([f" {opt}" for opt in c_options])
+        complier_list[i] += " ".join([f" -D{define}" for define in g_defines])
+        complier_list[i] += " ".join([f" {opt}" for opt in g_c_options])
 
     link_list = []
     # log.DEBUG("链接文件：", *link_task.items(), sep="\n")
@@ -610,12 +610,12 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
             )
             for source_file in source_files
         ]
-        global output_path
-        if os.path.isabs(output_path):
-            out_file_at = os.path.normpath(output_path)
+        global g_output_path
+        if os.path.isabs(g_output_path):
+            out_file_at = os.path.normpath(g_output_path)
         else:
             out_file_at = os.path.normpath(
-                os.path.join(os.path.dirname(build_path), output_path)
+                os.path.join(os.path.dirname(build_path), g_output_path)
             )
 
         if isWindows():
@@ -632,13 +632,13 @@ def generate_build_cmd(build_path: str, complier_task: list, link_task: dict):
         if not os.path.exists(out_file_at):
             os.makedirs(out_file_at)
         link_list.append(
-            f"{gnu} -o {os.path.normpath(out_file)} {' '.join(binaray_file)}"
+            f"{g_gnu} -o {os.path.normpath(out_file)} {' '.join(binaray_file)}"
         )
 
     # 添加链接库参数
     for i in range(len(link_list)):
-        link_list[i] += " ".join([f" -l{lib}" for lib in link])
-        link_list[i] += " ".join([f" -L{lib_dir}" for lib_dir in lib_dirs])
+        link_list[i] += " ".join([f" -l{lib}" for lib in g_link])
+        link_list[i] += " ".join([f" -L{lib_dir}" for lib_dir in g_lib_dirs])
 
     return complier_list, link_list
 
@@ -649,7 +649,7 @@ def include_extend(include_dirs: list) -> list:
         dir = item
         if dir not in res:
             res.append(dir)
-        for _ in range(include_parent_depth - 1):
+        for _ in range(g_include_parent_depth - 1):
             dir = os.path.dirname(dir)
             if dir not in res:
                 res.append(dir)
@@ -664,17 +664,17 @@ def exeute_complier_task(complier_cmd: list):
     pid = 0
     mutex = Lock()
     log.INFO("正在执行编译...")
-    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * max_thread_every_cpu)
+    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
 
     def complier_progress(cmd: str, pid: int):
         nonlocal count, mutex
         log.DEBUG(f"编译进程 {pid} 开始执行：{cmd}")
         with open(
-            os.path.join(build_path, f".complier_{pid}.log"), "a", encoding="utf-8"
+            os.path.join(g_build_path, f".complier_{pid}.log"), "a", encoding="utf-8"
         ) as f:
             pass
         res = os.system(
-            f"{cmd} 1>>{os.path.join(build_path, f'.complier_{pid}.log')} 2>&1"
+            f"{cmd} 1>>{os.path.join(g_build_path, f'.complier_{pid}.log')} 2>&1"
         )
         mutex.acquire()
         count += 1
@@ -703,7 +703,7 @@ def exeute_complier_task(complier_cmd: list):
                 print()
                 log.ERROR(f"任务 {complier_cmd[i].split()[3]} 编译失败！")
                 with open(
-                    os.path.join(build_path, f".complier_{i}.log"),
+                    os.path.join(g_build_path, f".complier_{i}.log"),
                     "r",
                     encoding="utf-8",
                 ) as f:
@@ -718,7 +718,7 @@ def exeute_complier_task(complier_cmd: list):
                         else:
                             print(line, end="")
                 return False
-            
+
         if count == len(complier_cmd):
             print(f"\r正在执行编译: [{'#'*50:.<50}] {count}/{len(complier_cmd)}")
             break
@@ -734,16 +734,16 @@ def exeute_link_task(link_cmd: list):
     pid = 0
     mutex = Lock()
     log.INFO("正在执行链接...")
-    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * max_thread_every_cpu)
+    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
 
     def link_progress(cmd: str, pid: int):
         nonlocal count, mutex
         log.DEBUG(f"链接进程 {pid} 开始执行：{cmd}")
         with open(
-            os.path.join(build_path, f".link_{pid}.log"), "a", encoding="utf-8"
+            os.path.join(g_build_path, f".link_{pid}.log"), "a", encoding="utf-8"
         ) as f:
             pass
-        res = os.system(f"{cmd} 1>>{os.path.join(build_path, f'.link_{pid}.log')} 2>&1")
+        res = os.system(f"{cmd} 1>>{os.path.join(g_build_path, f'.link_{pid}.log')} 2>&1")
         mutex.acquire()
         count += 1
         mutex.release()
@@ -782,7 +782,7 @@ def exeute_link_task(link_cmd: list):
     for i in faild_link:
         log.ERROR(f"任务 {link_cmd[i].split()[2]} 链接失败！")
         with open(
-            os.path.join(build_path, f".link_{i}.log"),
+            os.path.join(g_build_path, f".link_{i}.log"),
             "r",
             encoding="utf-8",
         ) as f:
@@ -822,51 +822,51 @@ def complier(options: list):
         return
     if not set_options(options[1:]):
         return
-    global build_path
-    build_path = os.path.join(path, ".build")
+    global g_build_path
+    g_build_path = os.path.join(path, ".build")
     # 清理构建目录
-    if rebuild and os.path.exists(build_path):
+    if g_rebuild and os.path.exists(g_build_path):
         log.INFO("正在清理构建目录...")
-        shutil.rmtree(build_path)
+        shutil.rmtree(g_build_path)
     # 获取整个项目目录
     log.INFO("正在获取项目目录信息...")
     dict_files = get_floders_dict(path)
     log.DEBUG(dict_files)
     old_dict_files = copy.deepcopy(dict_files)
     # 创建构建目录
-    if not os.path.exists(build_path):
-        os.mkdir(build_path)
-    create_build_dir(build_path, dict_files)
+    if not os.path.exists(g_build_path):
+        os.mkdir(g_build_path)
+    create_build_dir(g_build_path, dict_files)
     # 确认编译器
     log.INFO("正在确认编译器...")
     res1 = os.system(
-        f"{gnu} --version 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1"
+        f"{g_gnu} --version 1>>{os.path.join(g_build_path, '.cprinfo.log')} 2>&1"
     )
-    res2 = os.system(f"{gnu} -v 1>>{os.path.join(build_path, '.cprinfo.log')} 2>&1")
+    res2 = os.system(f"{g_gnu} -v 1>>{os.path.join(g_build_path, '.cprinfo.log')} 2>&1")
     if res1 != 0 and res2 != 0:
-        log.ERROR(f"找不到编译器: {gnu}")
+        log.ERROR(f"找不到编译器: {g_gnu}")
         return
     # 计算每个文件的哈希值
-    type_name_str = "哈希值" if rebuild or not os.path.exists(build_path) else "差异"
+    type_name_str = "哈希值" if g_rebuild or not os.path.exists(g_build_path) else "差异"
     log.INFO(f"正在计算{type_name_str}...")
     hash_file(hashlib.md5, dict_files, path)
-    print(f"\r正在计算哈希: [{'#'*50}] {file_count}/{file_count}")
+    print(f"\r正在计算哈希: [{'#'*50}] {g_file_count}/{g_file_count}")
     new_dict_files = copy.deepcopy(dict_files)
     # 载入哈希值
-    if os.path.exists(os.path.join(build_path, ".hash.pkl")):
-        with open(os.path.join(build_path, ".hash.pkl"), "rb") as f:
+    if os.path.exists(os.path.join(g_build_path, ".hash.pkl")):
+        with open(os.path.join(g_build_path, ".hash.pkl"), "rb") as f:
             old_dict_files = pickle.load(f)
-    if not os.path.exists(os.path.join(build_path, ".out")):
-        os.mkdir(os.path.join(build_path, ".out"))
+    if not os.path.exists(os.path.join(g_build_path, ".out")):
+        os.mkdir(os.path.join(g_build_path, ".out"))
     # 比较哈希值
     diff_files(dict_files, old_dict_files)
-    if not rebuild:
+    if not g_rebuild:
         print(
-            f"\r正在比较差异: [{'#'*50:.<50}] {file_count}/{file_count}",
+            f"\r正在比较差异: [{'#'*50:.<50}] {g_file_count}/{g_file_count}",
         )
-    if not rebuild or not os.path.exists(build_path):
-        global diff_file_count
-        log.INFO(f"{diff_file_count} 个文件被更改")
+    if not g_rebuild or not os.path.exists(g_build_path):
+        global g_diff_file_count
+        log.INFO(f"{g_diff_file_count} 个文件被更改")
     log.DEBUG(dict_files)
     # 构造头文件依赖表
     log.INFO("正在分析头文件依赖...")
@@ -884,10 +884,10 @@ def complier(options: list):
     log.INFO(f"检索到 {len(main_source)} 个具有主函数的文件")
 
     # 添加头文件搜索路径
-    global include_dirs
+    global g_include_dirs
     for item in header_dict:
-        include_dirs.append(os.path.abspath(os.path.join(path, os.path.dirname(item))))
-    include_dirs = list(set(include_dirs))
+        g_include_dirs.append(os.path.abspath(os.path.join(path, os.path.dirname(item))))
+    g_include_dirs = list(set(g_include_dirs))
 
     log.INFO("正在生成任务...")
     complier_task, link_task = generate_task(
@@ -897,18 +897,18 @@ def complier(options: list):
     log.DEBUG("编译任务：", complier_task)
     log.DEBUG("链接任务：", link_task)
 
-    include_dirs = include_extend(include_dirs)
+    g_include_dirs = include_extend(g_include_dirs)
 
-    log.DEBUG("编译器：", gnu)
-    log.DEBUG("标准：", std)
-    log.DEBUG("头文件搜索路径：", include_dirs)
-    log.DEBUG("库文件搜索路径：", lib_dirs)
-    log.DEBUG("链接库参数：", link)
-    log.DEBUG("其它编译选项：", c_options)
+    log.DEBUG("编译器：", g_gnu)
+    log.DEBUG("标准：", g_std)
+    log.DEBUG("头文件搜索路径：", g_include_dirs)
+    log.DEBUG("库文件搜索路径：", g_lib_dirs)
+    log.DEBUG("链接库参数：", g_link)
+    log.DEBUG("其它编译选项：", g_c_options)
 
     # 生成编译命令
     log.INFO("正在生成编译和链接命令...")
-    complier_cmd, link_cmd = generate_build_cmd(build_path, complier_task, link_task)
+    complier_cmd, link_cmd = generate_build_cmd(g_build_path, complier_task, link_task)
 
     log.DEBUG("编译命令：", *complier_cmd, sep="\n")
     log.DEBUG("编译命令：", *link_cmd, sep="\n")
@@ -920,7 +920,7 @@ def complier(options: list):
         return
 
     # 保存哈希值
-    with open(os.path.join(build_path, ".hash.pkl"), "wb") as f:
+    with open(os.path.join(g_build_path, ".hash.pkl"), "wb") as f:
         pickle.dump(new_dict_files, f)
 
     # 执行链接命令
@@ -928,9 +928,9 @@ def complier(options: list):
 
     log.INFO("编译完成！")
 
-    if run and link_res:
+    if g_run and link_res:
         log.INFO("正在启用运行...")
-        for root, dirs, pragrams in os.walk(os.path.join(path, output_path)):
+        for root, dirs, pragrams in os.walk(os.path.join(path, g_output_path)):
             for pragram in pragrams:
                 if pragram.endswith(".exe" if isWindows() else ""):
                     log.INFO(f"正在运行{pragram}...")
