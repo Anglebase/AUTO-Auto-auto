@@ -1,5 +1,8 @@
 import os, hashlib, pickle, copy, log
-import shutil, sys
+import time
+import shutil
+from concurrent.futures import ThreadPoolExecutor, Future
+from threading import Lock
 
 has_build = False
 
@@ -21,6 +24,7 @@ file_count = 0
 source_file_count = 0
 
 build_path = ""
+max_thread_every_cpu = 10
 
 include_parent_depth = 2
 
@@ -124,6 +128,7 @@ def set_options(option: list):
         /win                强制采用Windows命名风格编译(.obj)
         /unix               强制采用Linux命名风格编译(.o)
         /all                显示更加详细的输出信息
+        /th=                指定单核最大并发编译线程数，默认为10
         /out=               指定结果输出目录，默认为out
         /ign=               指定忽略的文件夹名，默认为build,dist,venv,docs,out,bin
         /ign+=              额外指定忽略的文件夹名
@@ -226,6 +231,13 @@ def set_options(option: list):
         elif item.startswith("/out="):
             global output_path
             output_path = item[5:]
+        elif item.startswith("/th="):
+            global max_thread_every_cpu
+            if item[4:].isdigit():
+                max_thread_every_cpu = int(item[4:])
+            else:
+                log.ERROR("选项参数必须为数字：", item)
+                return False
         else:
             log.WARNING("被忽略的未知选项：", item)
 
@@ -643,6 +655,74 @@ def include_extend(include_dirs: list) -> list:
     return res
 
 
+def exeute_complier_task(complier_cmd: list):
+    if not complier_cmd:
+        log.INFO("没有需要编译的文件")
+        return True
+    count = 0
+    pid = 0
+    mutex = Lock()
+    pool = ThreadPoolExecutor(max_workers=os.cpu_count() * max_thread_every_cpu)
+
+    def complier_progress(cmd: str, pid: int):
+        nonlocal count, mutex
+        log.DEBUG(f"编译进程 {pid} 开始执行：{cmd}")
+        with open(
+            os.path.join(build_path, f".complier_{pid}.log"), "a", encoding="utf-8"
+        ) as f:
+            pass
+        res = os.system(
+            f"{cmd} 1>>{os.path.join(build_path, f'.complier_{pid}.log')} 2>&1"
+        )
+        mutex.acquire()
+        count += 1
+        mutex.release()
+        return res
+
+    res_ls: list[Future] = []
+
+    for cmd in complier_cmd:
+        res_ls.append(pool.submit(complier_progress, cmd, pid))
+        pid += 1
+
+    while True:
+        print(
+            f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*50):.<50}] {count}/{len(complier_cmd)}",
+            end="",
+        )
+        time.sleep(0.1)
+        if count == len(complier_cmd):
+            print(f"\r正在执行编译: [{'#'*50:.<50}] {count}/{len(complier_cmd)}")
+            break
+
+    for i in range(len(res_ls)):
+        res = res_ls[i].result()
+        if res != 0:
+            log.ERROR(f"编译失败！")
+            with open(
+                os.path.join(build_path, f".complier_{i}.log"), "r", encoding="utf-8"
+            ) as f:
+                log.INFO("编译器输出：")
+                for line in f:
+                    if "note:" in line:
+                        print("\033[36m" + line.strip() + "\033[0m")
+                    elif "warning:" in line:
+                        print("\033[33m" + line.strip() + "\033[0m")
+                    elif "error:" in line:
+                        print("\033[31m" + line.strip() + "\033[0m")
+                    else:
+                        print(line, end="")
+            return False
+
+    return True
+
+
+def exeute_link_task(link_cmd: list):
+    if not link_cmd:
+        log.INFO("没有需要链接的文件")
+        return
+
+
 def complier(options: list):
     if not options:
         log.INFO("cpm -c 命令文档:")
@@ -755,49 +835,7 @@ def complier(options: list):
     Faild = False
     LEN = 50
     # 执行编译命令
-    if complier_cmd:
-        log.INFO("正在执行编译任务...")
-        count = 0
-        with open(
-            os.path.join(build_path, ".complier.log"), "w", encoding="utf-8"
-        ) as f:
-            pass
-        for cmd in complier_cmd:
-            count += 1
-            res = os.system(
-                f"{cmd} 1>>{os.path.join(build_path, '.complier.log')} 2>&1"
-            )
-            print(
-                f"\r正在执行编译: [{'#'*int(count/len(complier_cmd)*LEN):.<50}] {count}/{len(complier_cmd)}",
-                end="",
-            )
-            if res != 0:
-                print()
-                log.ERROR("编译失败！")
-                Faild = True
-                break
-        if not Faild:
-            print(
-                f"\r正在执行编译: [{'#'*50:.<50}] {len(complier_cmd)}/{len(complier_cmd)}"
-            )
-        if os.path.getsize(os.path.join(build_path, ".complier.log")):
-            with open(
-                os.path.join(build_path, ".complier.log"), "r", encoding="utf-8"
-            ) as f:
-                log.INFO("编译器输出：")
-                for line in f:
-                    if "note:" in line:
-                        print("\033[36m" + line.strip() + "\033[0m")
-                    elif "warning:" in line:
-                        print("\033[33m" + line.strip() + "\033[0m")
-                    elif "error:" in line:
-                        print("\033[31m" + line.strip() + "\033[0m")
-                    else:
-                        print(line, end="")
-    else:
-        log.INFO("没有需要编译的文件")
-
-    if Faild:
+    if not exeute_complier_task(complier_cmd):
         return
 
     # 保存哈希值
