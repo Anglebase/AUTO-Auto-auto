@@ -5,16 +5,17 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from threading import Lock
 
 
-def show_progress(current, total, msg):
+def show_progress(current, total, msg, warp=True):
     time.sleep(0.1)
-    scount = int(current / total * 50)
+    scount = int(current / total * 30)
     whitespaces = len(str(total)) - len(str(current))
     print(
-        f"\r{msg}: [{'#'*scount:.<50}] {whitespaces*' '}({current}/{total})",
+        f"\r{msg}: [{'#'*scount:.<30}] {whitespaces*' '}({current}/{total})",
         end="",
     )
     if current == total:
-        print()
+        if warp:
+            print()
         return False
 
     return True
@@ -306,39 +307,34 @@ def hash_file(hash_func: callable, project_dict: dict, file_path: str):
     hash_pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
     mutex_g_hased_file_count = Lock()
     mutex_g_link_g_lib_dirs = Lock()
-    mutex_hashpool = Lock()
 
     def hash_dir_files(hash_func: callable, project_dict: dict, file_path: str):
         global g_hased_file_count
-        nonlocal hash_pool, mutex_g_hased_file_count, mutex_g_link_g_lib_dirs, mutex_hashpool
+        nonlocal hash_pool, mutex_g_hased_file_count, mutex_g_link_g_lib_dirs
         for name in project_dict:
             if type(project_dict[name]) == str:
                 with open(os.path.join(file_path, name), "rb") as f:
                     project_dict[name] = hash_func(f.read()).hexdigest()
                 # 若是链接库自动追加搜索路径和链接参数
-                mutex_g_link_g_lib_dirs.acquire()
-                if islibirary(name):
-                    global g_link, g_lib_dirs
-                    g_lib_dirs.append(file_path)
-                    if name.endswith(".a"):
-                        g_link.append(name[3:-2])
-                    elif name.endswith(".so"):
-                        g_link.append(name[3:-3])
-                    elif name.endswith(".lib"):
-                        g_link.append(name[:-4])
-                mutex_g_link_g_lib_dirs.release()
-                mutex_g_hased_file_count.acquire()
-                g_hased_file_count += 1
-                mutex_g_hased_file_count.release()
+                with mutex_g_link_g_lib_dirs:
+                    if islibirary(name):
+                        global g_link, g_lib_dirs
+                        g_lib_dirs.append(file_path)
+                        if name.endswith(".a"):
+                            g_link.append(name[3:-2])
+                        elif name.endswith(".so"):
+                            g_link.append(name[3:-3])
+                        elif name.endswith(".lib"):
+                            g_link.append(name[:-4])
+                with mutex_g_hased_file_count:
+                    g_hased_file_count += 1
             else:
-                mutex_hashpool.acquire()
                 hash_pool.submit(
                     hash_dir_files,
                     hash_func,
                     project_dict[name],
                     os.path.join(file_path, name),
                 )
-                mutex_hashpool.release()
 
     hash_pool.submit(hash_dir_files, hash_func, project_dict, file_path)
 
@@ -350,11 +346,10 @@ def diff_files(project_dict: dict, old_project_dict: dict):
     diff_pool = ThreadPoolExecutor(max_workers=os.cpu_count() * g_max_thread_every_cpu)
     mutex_g_diff_file_count = Lock()
     mutex_g_hadcompare_file_count = Lock()
-    mutex_diffpool = Lock()
 
     def diff_dir_files(project_dict: dict, old_project_dict: dict):
         global g_diff_file_count
-        nonlocal diff_pool, mutex_g_diff_file_count, mutex_g_hadcompare_file_count, mutex_diffpool
+        nonlocal diff_pool, mutex_g_diff_file_count, mutex_g_hadcompare_file_count
         for name in project_dict:
             if type(project_dict[name]) == str:
                 log.DEBUG("比较先后文件差异：", name)
@@ -370,11 +365,9 @@ def diff_files(project_dict: dict, old_project_dict: dict):
                 g_hadcompare_file_count += 1
                 mutex_g_hadcompare_file_count.release()
             else:
-                mutex_diffpool.acquire()
                 diff_pool.submit(
                     diff_dir_files, project_dict[name], old_project_dict.get(name, {})
                 )
-                mutex_diffpool.release()
 
     diff_pool.submit(diff_dir_files, project_dict, old_project_dict)
 
@@ -384,13 +377,16 @@ def diff_files(project_dict: dict, old_project_dict: dict):
 
 def tree_headers(relpath: str, project_dict: dict):
     header_dict = {}
+    floder_count = 1
 
     def get_headers(path: str, header_dict_ls: dict):
+        nonlocal floder_count
         for name in header_dict_ls:
             if type(header_dict_ls[name]) == str:
                 if isheader(name) and os.path.join(path, name) not in header_dict:
                     header_dict[os.path.join(path, name)] = []
-            else:
+            elif type(header_dict_ls[name]) == dict:
+                floder_count += 1
                 get_headers(os.path.join(path, name), header_dict_ls[name])
 
     # 递归遍历目录，获取头文件
@@ -399,25 +395,59 @@ def tree_headers(relpath: str, project_dict: dict):
 
     log.INFO("检索到头文件数：", len(header_dict))
 
-    def append_headers(path: str):
-        with open(os.path.join(relpath, path), "r", encoding="utf-8") as f:
-            for line in f:
-                if "#include" in line:
-                    for item in header_dict:
-                        filename = os.path.basename(item)
-                        if filename.lower() in line.lower():
-                            header_dict[item].append(path)
+    getsrc_pool = ThreadPoolExecutor(
+        max_workers=os.cpu_count() * g_max_thread_every_cpu * 2
+    )
+    mutex_write_header_dict = Lock()
+    mutex_stdout = Lock()
+
+    finish_count = 0
+    mutex_finish_count = Lock()
+
+    stdout_buffer = []
 
     def get_sources(path: str, project_dict: dict):
+        nonlocal getsrc_pool, mutex_write_header_dict
+        nonlocal header_dict, mutex_stdout, stdout_buffer
         for name in project_dict:
+            at_path = os.path.join(path, name)
             if type(project_dict[name]) == str:
                 if issource(name) or isheader(name):
-                    append_headers(os.path.join(path, name))
+                    try:
+                        with open(
+                            os.path.join(relpath, at_path), "r", encoding="utf-8"
+                        ) as f:
+                            for line in f:
+                                if not "#include" in line:
+                                    continue
+                                for item in header_dict:
+                                    filename = os.path.basename(item)
+                                    if filename.lower() in line.lower():
+                                        with mutex_write_header_dict:
+                                            header_dict[item].append(at_path)
+                    except UnicodeDecodeError:
+                        with mutex_stdout:
+                            stdout_buffer.append(
+                                f"文件 {os.path.join(relpath, at_path)} 无法识别为UTF-8编码，跳过"
+                            )
             else:
-                get_sources(os.path.join(path, name), project_dict[name])
+                getsrc_pool.submit(
+                    get_sources, os.path.join(path, name), project_dict[name]
+                )
+        with mutex_finish_count:
+            nonlocal finish_count
+            finish_count += 1
 
     # 递归遍历目录，构建头文件依赖表
-    get_sources(".", project_dict)
+    getsrc_pool.submit(get_sources, ".", project_dict)
+
+    log.INFO("正在构建头文件依赖表...")
+    while show_progress(finish_count, floder_count, "正在索引依赖"):
+        pass
+
+    for string in stdout_buffer:
+        log.WARNING(string)
+
     log.DEBUG(*header_dict.items(), sep="\n")
 
     for item in header_dict:
@@ -724,9 +754,8 @@ def exeute_complier_task(complier_cmd: list):
         res = os.system(
             f"{cmd} 1>>{os.path.join(g_build_path, f'.complier_{pid}.log')} 2>&1"
         )
-        mutex.acquire()
-        count += 1
-        mutex.release()
+        with mutex:
+            count += 1
         return res
 
     res_ls: list[Future] = []
@@ -784,9 +813,8 @@ def exeute_link_task(link_cmd: list):
         res = os.system(
             f"{cmd} 1>>{os.path.join(g_build_path, f'.link_{pid}.log')} 2>&1"
         )
-        mutex.acquire()
-        count += 1
-        mutex.release()
+        with mutex:
+            count += 1
         return res
 
     res_ls: list[Future] = []
